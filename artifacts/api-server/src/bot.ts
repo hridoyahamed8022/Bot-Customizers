@@ -90,9 +90,32 @@ const floodData = new Map<number, { count: number; timer: ReturnType<typeof setT
 const stickerData = new Map<number, { count: number; timer: ReturnType<typeof setTimeout> }>();
 const newMemberJoinTime = new Map<number, number>();
 
+// ─── Bad Words Filter ─────────────────────────────────────────────────────────
+const BAD_WORDS = [
+  // Bengali bad words (common)
+  "শালা", "শালি", "মাদার", "বাস্টার্ড", "হারামি", "হারামজাদা", "কুত্তা",
+  "কুত্তার বাচ্চা", "বেশ্যা", "খানকি", "মাগি", "চোদা", "চোদন", "ভোদা",
+  "গাধা", "বেজন্মা", "জারজ", "মুখ বন্ধ", "চুপ কর", "ফাক", "ফাক ইউ",
+  // English bad words
+  "fuck", "shit", "asshole", "bitch", "bastard", "damn", "crap",
+  "dick", "cock", "pussy", "nigga", "nigger", "whore", "slut", "motherfucker",
+];
+
+function containsBadWord(text: string): boolean {
+  const lower = text.toLowerCase();
+  return BAD_WORDS.some((w) => lower.includes(w.toLowerCase()));
+}
+
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 async function tryDelete(chatId: number, messageId: number) {
-  try { await bot.deleteMessage(chatId, messageId); } catch { /* ignored */ }
+  try {
+    await bot.deleteMessage(chatId, messageId);
+  } catch (err: unknown) {
+    const errMsg = err instanceof Error ? err.message : String(err);
+    if (!errMsg.includes("message to delete not found") && !errMsg.includes("MESSAGE_ID_INVALID")) {
+      logger.warn({ chatId, messageId, err: errMsg }, "Failed to delete message");
+    }
+  }
 }
 
 function scheduleDelete(chatId: number, messageId: number, ms = DELETE_AFTER_MS) {
@@ -556,6 +579,19 @@ bot.on("message", async (msg) => {
       const t = result === "muted"
         ? muteMsg(firstName, "অপরিচিত ভাষায় স্প্যাম")
         : warnMsg(firstName, "আরবি/অপরিচিত ভাষায় মেসেজ নিষিদ্ধ", warnings.get(userId)?.count ?? 1);
+      await sendTemp(chatId, t);
+    }
+    return;
+  }
+
+  // ── Bad language filter ───────────────────────────────────────────────────
+  if (containsBadWord(text) && !isAdminUser) {
+    await tryDelete(chatId, msgId);
+    if (!mutedUsers.has(userId)) {
+      const result = await addWarning(chatId, userId, firstName, username, "খারাপ ভাষা ব্যবহার");
+      const t = result === "muted"
+        ? muteMsg(firstName, "বারবার খারাপ ভাষা ব্যবহার")
+        : warnMsg(firstName, "গ্রুপে খারাপ/অশ্লীল ভাষা নিষিদ্ধ", warnings.get(userId)?.count ?? 1);
       await sendTemp(chatId, t);
     }
     return;
