@@ -1,14 +1,18 @@
 import TelegramBot from "node-telegram-bot-api";
+import { GoogleGenAI } from "@google/genai";
 import { logger } from "./lib/logger";
 
 const TOKEN = process.env["TELEGRAM_BOT_TOKEN"];
 const ADMIN_CHAT_ID = process.env["ADMIN_CHAT_ID"]
   ? Number(process.env["ADMIN_CHAT_ID"])
   : null;
+const GEMINI_API_KEY = process.env["GEMINI_API_KEY"];
 
 if (!TOKEN) throw new Error("TELEGRAM_BOT_TOKEN is required");
+if (!GEMINI_API_KEY) throw new Error("GEMINI_API_KEY is required");
 
 const bot = new TelegramBot(TOKEN, { polling: true });
+const genai = new GoogleGenAI({ apiKey: GEMINI_API_KEY });
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 const MOVIE_BOT = "@moviex_hub_bot";
@@ -21,6 +25,62 @@ const STICKER_LIMIT = 3;
 const STICKER_WINDOW_MS = 10_000;
 const NEW_MEMBER_RESTRICT_MS = 5 * 60 * 1_000;
 const AUTO_UNMUTE_MS = 24 * 60 * 60 * 1_000;
+
+// ─── AI System Prompt ─────────────────────────────────────────────────────────
+const SYSTEM_PROMPT = `তুমি একটি বাংলা Telegram গ্রুপের সহকারী বট। তোমার নাম "MovieX Hub Bot"।
+তুমি সম্পূর্ণ বাংলায় কথা বলবে, মানুষের মতো স্বাভাবিক ও বন্ধুত্বপূর্ণ ভাষায়।
+
+তোমার গ্রুপ সম্পর্কে তথ্য:
+- গ্রুপটি মুভি ও নাটক শেয়ারের গ্রুপ
+- মুভি/নাটক পেতে ${MOVIE_BOT} বটে ইংরেজি নাম লিখতে হয়
+- গ্রুপের পরিচালক: ${ADMIN_USERNAME}
+- গ্রুপে লিংক শেয়ার নিষিদ্ধ, স্প্যাম নিষিদ্ধ
+
+তোমার আচরণ:
+- সংক্ষিপ্ত ও স্পষ্ট উত্তর দাও (৩-৫ লাইনের মধ্যে)
+- বন্ধুত্বপূর্ণ ও সহানুভূতিশীল হও
+- কেউ মুভি চাইলে ${MOVIE_BOT} এ পাঠাও
+- কেউ ব্যান/মিউট নিয়ে জিজ্ঞেস করলে ${ADMIN_USERNAME} এ পাঠাও
+- কেউ সালাম/হ্যালো দিলে সুন্দরভাবে উত্তর দাও
+- কোনো প্রশ্ন করলে বিষয়ভিত্তিক সাহায্য করো
+- HTML ট্যাগ ব্যবহার করো না, শুধু সাধারণ টেক্সট লেখো
+- শেষে সবসময় এই লাইনটি যোগ করো না, শুধু স্বাভাবিকভাবে কথা বলো`;
+
+// ─── Conversation History (per user) ─────────────────────────────────────────
+type ChatTurn = { role: "user" | "model"; text: string };
+const conversationHistory = new Map<number, ChatTurn[]>();
+const MAX_HISTORY = 10;
+
+async function getAIReply(userId: number, userMessage: string): Promise<string> {
+  const history = conversationHistory.get(userId) ?? [];
+
+  history.push({ role: "user", text: userMessage });
+  if (history.length > MAX_HISTORY * 2) history.splice(0, 2);
+
+  try {
+    const contents = history.map((h) => ({
+      role: h.role,
+      parts: [{ text: h.text }],
+    }));
+
+    const response = await genai.models.generateContent({
+      model: "gemini-2.5-flash",
+      contents,
+      config: {
+        systemInstruction: SYSTEM_PROMPT,
+        maxOutputTokens: 512,
+      },
+    });
+
+    const reply = response.text?.trim() ?? "দুঃখিত, এই মুহূর্তে উত্তর দিতে পারছি না।";
+    history.push({ role: "model", text: reply });
+    conversationHistory.set(userId, history);
+    return reply;
+  } catch (err) {
+    logger.error({ err }, "Gemini API error");
+    return `দুঃখিত, এই মুহূর্তে উত্তর দিতে পারছি না। সাহায্যের জন্য ${ADMIN_USERNAME} -কে মেসেজ করুন।`;
+  }
+}
 
 // ─── State ────────────────────────────────────────────────────────────────────
 type UserWarning = { count: number; reasons: string[] };
@@ -35,7 +95,7 @@ async function tryDelete(chatId: number, messageId: number) {
   try { await bot.deleteMessage(chatId, messageId); } catch { /* ignored */ }
 }
 
-async function deleteAfter(chatId: number, messageId: number, ms = DELETE_AFTER_MS) {
+function scheduleDelete(chatId: number, messageId: number, ms = DELETE_AFTER_MS) {
   setTimeout(() => tryDelete(chatId, messageId), ms);
 }
 
@@ -49,7 +109,7 @@ async function sendTemp(
       parse_mode: "HTML",
       ...extra,
     });
-    deleteAfter(chatId, msg.message_id);
+    scheduleDelete(chatId, msg.message_id);
     return msg;
   } catch (err) {
     logger.error({ err }, "sendTemp failed");
@@ -143,7 +203,7 @@ async function notifyAdmin(
         ],
         [
           { text: "⚠️ সতর্কতা মুছুন", callback_data: `clearwarn:${chatId}:${userId}` },
-          { text: "👁 প্রোফাইল", url: `tg://user?id=${userId}` },
+          { text: "👁 প্রোফাইল দেখুন", url: `tg://user?id=${userId}` },
         ],
       ]
     : [
@@ -153,7 +213,7 @@ async function notifyAdmin(
         ],
         [
           { text: "✅ উপেক্ষা করুন", callback_data: `ignore:${chatId}:${userId}` },
-          { text: "👁 প্রোফাইল", url: `tg://user?id=${userId}` },
+          { text: "👁 প্রোফাইল দেখুন", url: `tg://user?id=${userId}` },
         ],
       ];
 
@@ -206,8 +266,7 @@ function isFlood(userId: number): boolean {
     return false;
   }
   d.count += 1;
-  if (d.count > FLOOD_LIMIT) return true;
-  return false;
+  return d.count > FLOOD_LIMIT;
 }
 
 function isStickerSpam(userId: number): boolean {
@@ -218,8 +277,7 @@ function isStickerSpam(userId: number): boolean {
     return false;
   }
   d.count += 1;
-  if (d.count > STICKER_LIMIT) return true;
-  return false;
+  return d.count > STICKER_LIMIT;
 }
 
 function isNewMember(userId: number): boolean {
@@ -228,156 +286,60 @@ function isNewMember(userId: number): boolean {
   return Date.now() - joined < NEW_MEMBER_RESTRICT_MS;
 }
 
-// ─── Modern Messages ──────────────────────────────────────────────────────────
+// ─── Spam message templates ───────────────────────────────────────────────────
 function warnMsg(firstName: string, reason: string, count: number): string {
   return (
-    `╔══════════════════════╗\n` +
-    `  ⚠️  <b>সতর্কতা বার্তা</b>\n` +
-    `╚══════════════════════╝\n\n` +
+    `╔══════════════════╗\n` +
+    `  ⚠️  <b>সতর্কতা</b>\n` +
+    `╚══════════════════╝\n\n` +
     `👤 <b>${firstName}</b>\n` +
-    `📌 <b>কারণ:</b> ${reason}\n` +
-    `🔢 <b>সতর্কতা:</b> ${count}/${MAX_WARNINGS}\n\n` +
-    `${count >= MAX_WARNINGS - 1
-      ? "🚨 <b>পরবর্তী লঙ্ঘনে আপনি মিউট হবেন!</b>"
-      : `⚡ আরও ${MAX_WARNINGS - count}টি সতর্কতা বাকি`}\n\n` +
-    `<i>⏳ এই বার্তা ৩০ সেকেন্ড পর মুছে যাবে</i>`
+    `📌 কারণ: ${reason}\n` +
+    `🔢 সতর্কতা: ${count}/${MAX_WARNINGS}\n\n` +
+    `${count >= MAX_WARNINGS - 1 ? "🚨 <b>পরের বার মিউট হবেন!</b>" : `⚡ আরও ${MAX_WARNINGS - count}টি বাকি`}\n\n` +
+    `<i>⏳ ৩০ সেকেন্ড পর মুছে যাবে</i>`
   );
 }
 
 function muteMsg(firstName: string, reason: string): string {
   return (
-    `╔══════════════════════╗\n` +
-    `  🔇  <b>মিউট করা হয়েছে</b>\n` +
-    `╚══════════════════════╝\n\n` +
-    `👤 <b>${firstName}</b> কে মিউট করা হয়েছে।\n` +
-    `📌 <b>কারণ:</b> ${reason}\n\n` +
-    `🔓 <b>আনমিউট হতে চাইলে:</b>\n` +
-    `${ADMIN_USERNAME} -কে মেসেজ করুন\n\n` +
-    `⏰ <i>২৪ ঘণ্টা পর স্বয়ংক্রিয় আনমিউট হবে</i>\n` +
-    `<i>⏳ এই বার্তা ৩০ সেকেন্ড পর মুছে যাবে</i>`
+    `╔══════════════════╗\n` +
+    `  🔇  <b>মিউট</b>\n` +
+    `╚══════════════════╝\n\n` +
+    `👤 <b>${firstName}</b> মিউট হয়েছেন।\n` +
+    `📌 কারণ: ${reason}\n\n` +
+    `🔓 মিউট তুলতে: ${ADMIN_USERNAME}\n` +
+    `⏰ ২৪ ঘণ্টা পর অটো আনমিউট\n\n` +
+    `<i>⏳ ৩০ সেকেন্ড পর মুছে যাবে</i>`
   );
 }
 
-function helpMsg(firstName: string): string {
-  return (
-    `╔══════════════════════╗\n` +
-    `  🤖  <b>MovieX Hub Bot</b>\n` +
-    `╚══════════════════════╝\n\n` +
-    `👋 হ্যালো <b>${firstName}</b>! আমি কীভাবে সাহায্য করতে পারি?\n\n` +
-    `🎬 <b>মুভি/নাটক পেতে:</b>\n` +
-    `└ ${MOVIE_BOT} -এ ইংরেজি নাম লিখুন\n\n` +
-    `🔓 <b>ব্যান/মিউট সমস্যায়:</b>\n` +
-    `└ ${ADMIN_USERNAME} -কে মেসেজ করুন\n\n` +
-    `📋 <b>গ্রুপের নিয়ম:</b>\n` +
-    `└ লিংক শেয়ার নিষিদ্ধ\n` +
-    `└ স্প্যাম করা যাবে না\n` +
-    `└ বড় হাতে লেখা নিষিদ্ধ\n\n` +
-    `<i>⏳ এই বার্তা ৩০ সেকেন্ড পর মুছে যাবে</i>`
-  );
+// ─── Keyboard builders ────────────────────────────────────────────────────────
+function movieKeyboard(): TelegramBot.InlineKeyboardMarkup {
+  return {
+    inline_keyboard: [[
+      { text: "🎬 মুভি বট খুলুন", url: "https://t.me/moviex_hub_bot" },
+    ]],
+  };
 }
 
-function movieMsg(firstName: string): string {
-  return (
-    `╔══════════════════════╗\n` +
-    `  🎬  <b>মুভি/নাটক খুঁজুন</b>\n` +
-    `╚══════════════════════╝\n\n` +
-    `👤 <b>${firstName}</b>, আপনি মুভি বা নাটক খুঁজছেন?\n\n` +
-    `✅ <b>কীভাবে পাবেন:</b>\n` +
-    `└ ${MOVIE_BOT} -এ যান\n` +
-    `└ সঠিক <b>ইংরেজি নাম</b> লিখুন\n` +
-    `└ উদাহরণ: <code>Avengers Endgame</code>\n\n` +
-    `<i>⏳ এই বার্তা ৩০ সেকেন্ড পর মুছে যাবে</i>`
-  );
+function adminKeyboard(): TelegramBot.InlineKeyboardMarkup {
+  return {
+    inline_keyboard: [[
+      { text: "📩 অ্যাডমিনকে মেসেজ করুন", url: "https://t.me/smartdollarsells" },
+    ]],
+  };
 }
 
-function banMsg(firstName: string): string {
-  return (
-    `╔══════════════════════╗\n` +
-    `  🔓  <b>ব্যান/মিউট সমস্যা</b>\n` +
-    `╚══════════════════════╝\n\n` +
-    `😔 <b>${firstName}</b>, আপনার সমস্যার কথা জানতে পারলাম।\n\n` +
-    `📩 <b>সমাধান পেতে:</b>\n` +
-    `└ ${ADMIN_USERNAME} -কে সরাসরি মেসেজ করুন\n` +
-    `└ আপনার User ID: <code>দিন</code>\n` +
-    `└ সমস্যার বিবরণ লিখুন\n\n` +
-    `⏰ <i>অ্যাডমিন যত তাড়াতাড়ি সম্ভব সমাধান করবেন।</i>\n\n` +
-    `<i>⏳ এই বার্তা ৩০ সেকেন্ড পর মুছে যাবে</i>`
-  );
+function defaultKeyboard(): TelegramBot.InlineKeyboardMarkup {
+  return {
+    inline_keyboard: [[
+      { text: "🎬 মুভি বট", url: "https://t.me/moviex_hub_bot" },
+      { text: "📩 অ্যাডমিন", url: "https://t.me/smartdollarsells" },
+    ]],
+  };
 }
 
-function greetMsg(firstName: string): string {
-  return (
-    `╔══════════════════════╗\n` +
-    `  👋  <b>MovieX Hub Bot</b>\n` +
-    `╚══════════════════════╝\n\n` +
-    `হ্যালো <b>${firstName}</b>! 😊\n\n` +
-    `আমি এই গ্রুপের সহকারী বট।\n` +
-    `আপনার যেকোনো সাহায্যে আমি প্রস্তুত!\n\n` +
-    `<i>⏳ এই বার্তা ৩০ সেকেন্ড পর মুছে যাবে</i>`
-  );
-}
-
-function defaultMsg(firstName: string): string {
-  return (
-    `╔══════════════════════╗\n` +
-    `  🤖  <b>MovieX Hub Bot</b>\n` +
-    `╚══════════════════════╝\n\n` +
-    `👤 <b>${firstName}</b>, আপনার মেসেজ পেয়েছি!\n\n` +
-    `আমি যে বিষয়গুলোতে সাহায্য করতে পারি:\n\n` +
-    `🎬 মুভি/নাটক → ${MOVIE_BOT}\n` +
-    `🔓 ব্যান/মিউট → ${ADMIN_USERNAME}\n` +
-    `❓ যেকোনো সমস্যা → ${ADMIN_USERNAME}\n\n` +
-    `<i>⏳ এই বার্তা ৩০ সেকেন্ড পর মুছে যাবে</i>`
-  );
-}
-
-// ─── Intent Detection ─────────────────────────────────────────────────────────
-type Intent = "ban" | "movie" | "help" | "greeting" | "other";
-
-function detectIntent(text: string): Intent {
-  const t = text.toLowerCase();
-  if (/ব্যান|ban|banned|block|ব্লক|kick|আনব্যান|unban|মিউট|mute|বাধা|রিমুভ|remove/i.test(t)) return "ban";
-  if (/মুভি|movie|নাটক|drama|series|film|ফিল্ম|ডাউনলোড|download|পাবো|কোথায়|সিনেমা/i.test(t)) return "movie";
-  if (/হ্যালো|hello|hi|হাই|সালাম|ওহে|কেমন আছ|কি খবর/i.test(t)) return "greeting";
-  if (/সাহায্য|help|হেল্প|সমস্যা|problem|issue|কীভাবে|কিভাবে|বলুন|জানান/i.test(t)) return "help";
-  return "other";
-}
-
-function buildReplyText(intent: Intent, firstName: string): string {
-  switch (intent) {
-    case "ban": return banMsg(firstName);
-    case "movie": return movieMsg(firstName);
-    case "greeting": return greetMsg(firstName);
-    case "help": return helpMsg(firstName);
-    default: return defaultMsg(firstName);
-  }
-}
-
-function buildReplyKeyboard(intent: Intent): TelegramBot.InlineKeyboardMarkup {
-  switch (intent) {
-    case "movie":
-      return {
-        inline_keyboard: [[
-          { text: "🎬 মুভি বট খুলুন", url: `https://t.me/moviex_hub_bot` },
-        ]],
-      };
-    case "ban":
-      return {
-        inline_keyboard: [[
-          { text: "📩 অ্যাডমিনকে মেসেজ করুন", url: `https://t.me/smartdollarsells` },
-        ]],
-      };
-    default:
-      return {
-        inline_keyboard: [[
-          { text: "🎬 মুভি বট", url: `https://t.me/moviex_hub_bot` },
-          { text: "📩 অ্যাডমিন", url: `https://t.me/smartdollarsells` },
-        ]],
-      };
-  }
-}
-
-// ─── Welcome / Leave ─────────────────────────────────────────────────────────
+// ─── Welcome / Leave ──────────────────────────────────────────────────────────
 bot.on("new_chat_members", async (msg) => {
   await tryDelete(msg.chat.id, msg.message_id);
   const chatId = msg.chat.id;
@@ -387,25 +349,21 @@ bot.on("new_chat_members", async (msg) => {
     const firstName = member.first_name ?? "বন্ধু";
 
     const text =
-      `╔══════════════════════╗\n` +
-      `  🎉  <b>নতুন সদস্য!</b>\n` +
-      `╚══════════════════════╝\n\n` +
-      `👋 <b>স্বাগতম, ${firstName}!</b>\n\n` +
-      `আমাদের গ্রুপে আপনাকে আন্তরিকভাবে স্বাগত জানাই। 🌟\n\n` +
-      `🎬 <b>মুভি ও নাটক পেতে:</b>\n` +
+      `╔══════════════════╗\n` +
+      `  🎉  <b>স্বাগতম!</b>\n` +
+      `╚══════════════════╝\n\n` +
+      `👋 <b>${firstName}</b>, আমাদের গ্রুপে আপনাকে স্বাগত!\n\n` +
+      `🎬 <b>মুভি/নাটক পেতে:</b>\n` +
       `└ ${MOVIE_BOT} -এ ইংরেজি নাম লিখুন\n\n` +
       `📋 <b>গ্রুপের নিয়ম:</b>\n` +
       `└ ❌ লিংক শেয়ার নিষিদ্ধ\n` +
-      `└ ❌ স্প্যাম করা যাবে না\n` +
-      `└ ✅ সবার সাথে ভদ্রভাবে কথা বলুন\n\n` +
-      `<i>⏳ এই বার্তা ৩০ সেকেন্ড পর মুছে যাবে</i>`;
+      `└ ❌ স্প্যাম করা নিষিদ্ধ\n` +
+      `└ ✅ ভদ্রভাবে কথা বলুন\n\n` +
+      `💬 যেকোনো সাহায্যে আমাকে জিজ্ঞেস করুন!\n\n` +
+      `<i>⏳ ৩০ সেকেন্ড পর মুছে যাবে</i>`;
 
     await sendTemp(chatId, text, {
-      reply_markup: {
-        inline_keyboard: [[
-          { text: "🎬 মুভি বট খুলুন", url: "https://t.me/moviex_hub_bot" },
-        ]],
-      },
+      reply_markup: movieKeyboard(),
     });
   }
 });
@@ -417,14 +375,16 @@ bot.on("left_chat_member", async (msg) => {
 // ─── Admin Callback Handler ───────────────────────────────────────────────────
 bot.on("callback_query", async (query) => {
   if (!query.data || !query.from || !query.message) return;
+
   if (ADMIN_CHAT_ID && query.from.id !== ADMIN_CHAT_ID) {
     await bot.answerCallbackQuery(query.id, { text: "❌ শুধু অ্যাডমিন ব্যবহার করতে পারবেন।" });
     return;
   }
 
-  const [action, rawChatId, rawUserId] = query.data.split(":");
-  const chatId = Number(rawChatId);
-  const userId = Number(rawUserId);
+  const parts = query.data.split(":");
+  const action = parts[0];
+  const chatId = Number(parts[1]);
+  const userId = Number(parts[2]);
   const msgId = query.message.message_id;
   const adminChatId = query.message.chat.id;
 
@@ -434,19 +394,19 @@ bot.on("callback_query", async (query) => {
     switch (action) {
       case "unmute":
         await unmuteUser(chatId, userId);
-        answer = "✅ ব্যবহারকারীকে আনমিউট করা হয়েছে।";
+        answer = "✅ আনমিউট সম্পন্ন।";
         await bot.editMessageReplyMarkup(
           { inline_keyboard: [[{ text: "✅ আনমিউট করা হয়েছে", callback_data: "done" }]] },
-          { chat_id: adminChatId, message_id: msgId }
+          { chat_id: adminChatId, message_id: msgId },
         );
         break;
 
       case "mute":
         await muteUser(chatId, userId);
-        answer = "🔇 ব্যবহারকারীকে মিউট করা হয়েছে।";
+        answer = "🔇 মিউট সম্পন্ন।";
         await bot.editMessageReplyMarkup(
           { inline_keyboard: [[{ text: "🔇 মিউট করা হয়েছে", callback_data: "done" }]] },
-          { chat_id: adminChatId, message_id: msgId }
+          { chat_id: adminChatId, message_id: msgId },
         );
         break;
 
@@ -454,10 +414,10 @@ bot.on("callback_query", async (query) => {
         await bot.banChatMember(chatId, userId);
         mutedUsers.delete(userId);
         warnings.delete(userId);
-        answer = "🚫 ব্যবহারকারীকে ব্যান করা হয়েছে।";
+        answer = "🚫 ব্যান সম্পন্ন।";
         await bot.editMessageReplyMarkup(
           { inline_keyboard: [[{ text: "🚫 ব্যান করা হয়েছে", callback_data: "done" }]] },
-          { chat_id: adminChatId, message_id: msgId }
+          { chat_id: adminChatId, message_id: msgId },
         );
         break;
 
@@ -466,7 +426,7 @@ bot.on("callback_query", async (query) => {
         answer = "✅ সতর্কতা মুছে দেওয়া হয়েছে।";
         await bot.editMessageReplyMarkup(
           { inline_keyboard: [[{ text: "✅ সতর্কতা মুছে দেওয়া হয়েছে", callback_data: "done" }]] },
-          { chat_id: adminChatId, message_id: msgId }
+          { chat_id: adminChatId, message_id: msgId },
         );
         break;
 
@@ -474,17 +434,17 @@ bot.on("callback_query", async (query) => {
         answer = "✅ উপেক্ষা করা হয়েছে।";
         await bot.editMessageReplyMarkup(
           { inline_keyboard: [[{ text: "✅ উপেক্ষা করা হয়েছে", callback_data: "done" }]] },
-          { chat_id: adminChatId, message_id: msgId }
+          { chat_id: adminChatId, message_id: msgId },
         );
         break;
 
       case "done":
-        answer = "ইতিমধ্যে সম্পন্ন হয়েছে।";
+        answer = "ইতিমধ্যে সম্পন্ন।";
         break;
     }
   } catch (err) {
     logger.error({ err }, "Callback action failed");
-    answer = "❌ কাজটি সম্পন্ন করতে সমস্যা হয়েছে।";
+    answer = "❌ সমস্যা হয়েছে, আবার চেষ্টা করুন।";
   }
 
   await bot.answerCallbackQuery(query.id, { text: answer });
@@ -509,10 +469,10 @@ bot.on("message", async (msg) => {
     if (isStickerSpam(userId)) {
       await tryDelete(chatId, msgId);
       const result = await addWarning(chatId, userId, firstName, username, "স্টিকার স্প্যাম");
-      const text = result === "muted"
-        ? muteMsg(firstName, "অতিরিক্ত স্টিকার পাঠানো")
-        : warnMsg(firstName, "অতিরিক্ত স্টিকার পাঠানো", warnings.get(userId)?.count ?? 1);
-      await sendTemp(chatId, text);
+      const t = result === "muted"
+        ? muteMsg(firstName, "অতিরিক্ত স্টিকার")
+        : warnMsg(firstName, "অতিরিক্ত স্টিকার নিষিদ্ধ", warnings.get(userId)?.count ?? 1);
+      await sendTemp(chatId, t);
     }
     return;
   }
@@ -520,11 +480,11 @@ bot.on("message", async (msg) => {
   // ── Forwarded from channel/bot ────────────────────────────────────────────
   if ((msg.forward_from_chat || msg.forward_from?.is_bot) && !isAdminUser) {
     await tryDelete(chatId, msgId);
-    const result = await addWarning(chatId, userId, firstName, username, "চ্যানেল/বট থেকে ফরওয়ার্ড");
-    const text = result === "muted"
-      ? muteMsg(firstName, "চ্যানেল/বট থেকে ফরওয়ার্ড করা মেসেজ")
-      : warnMsg(firstName, "চ্যানেল/বট থেকে ফরওয়ার্ড নিষিদ্ধ", warnings.get(userId)?.count ?? 1);
-    await sendTemp(chatId, text);
+    const result = await addWarning(chatId, userId, firstName, username, "চ্যানেল/বট ফরওয়ার্ড");
+    const t = result === "muted"
+      ? muteMsg(firstName, "চ্যানেল ফরওয়ার্ড করা")
+      : warnMsg(firstName, "চ্যানেল/বট ফরওয়ার্ড নিষিদ্ধ", warnings.get(userId)?.count ?? 1);
+    await sendTemp(chatId, t);
     return;
   }
 
@@ -535,10 +495,10 @@ bot.on("message", async (msg) => {
   if (!isAdminUser && isFlood(userId)) {
     await tryDelete(chatId, msgId);
     if (!mutedUsers.has(userId)) {
-      const result = await addWarning(chatId, userId, firstName, username, "মেসেজ ফ্লাড/স্প্যাম");
+      const result = await addWarning(chatId, userId, firstName, username, "মেসেজ ফ্লাড");
       const t = result === "muted"
         ? muteMsg(firstName, "অতিরিক্ত মেসেজ স্প্যাম")
-        : warnMsg(firstName, "অতিরিক্ত মেসেজ পাঠানো নিষিদ্ধ", warnings.get(userId)?.count ?? 1);
+        : warnMsg(firstName, "অল্প সময়ে অনেক মেসেজ নিষিদ্ধ", warnings.get(userId)?.count ?? 1);
       await sendTemp(chatId, t);
     }
     return;
@@ -548,7 +508,9 @@ bot.on("message", async (msg) => {
   if (LINK_RE.test(text) && !isAdminUser) {
     await tryDelete(chatId, msgId);
     if (!mutedUsers.has(userId)) {
-      const reason = isNewMember(userId) ? "নতুন মেম্বার হিসেবে লিংক পাঠানো নিষিদ্ধ" : "লিংক শেয়ার নিষিদ্ধ";
+      const reason = isNewMember(userId)
+        ? "নতুন মেম্বার হিসেবে লিংক পাঠানো নিষিদ্ধ"
+        : "লিংক শেয়ার নিষিদ্ধ";
       const result = await addWarning(chatId, userId, firstName, username, reason);
       const t = result === "muted"
         ? muteMsg(firstName, reason)
@@ -566,7 +528,7 @@ bot.on("message", async (msg) => {
       const result = await addWarning(chatId, userId, firstName, username, "মেনশন স্প্যাম");
       const t = result === "muted"
         ? muteMsg(firstName, "একসাথে অনেককে ট্যাগ করা")
-        : warnMsg(firstName, "একসাথে ৩+ জনকে ট্যাগ করা নিষিদ্ধ", warnings.get(userId)?.count ?? 1);
+        : warnMsg(firstName, "৩+ জনকে একসাথে ট্যাগ নিষিদ্ধ", warnings.get(userId)?.count ?? 1);
       await sendTemp(chatId, t);
     }
     return;
@@ -586,27 +548,35 @@ bot.on("message", async (msg) => {
     return;
   }
 
-  // ── Arabic / foreign script spam ─────────────────────────────────────────
+  // ── Arabic/foreign script spam ────────────────────────────────────────────
   if (ARABIC_RE.test(text) && !isAdminUser) {
     await tryDelete(chatId, msgId);
     if (!mutedUsers.has(userId)) {
-      const result = await addWarning(chatId, userId, firstName, username, "বিদেশি ভাষায় স্প্যাম");
+      const result = await addWarning(chatId, userId, firstName, username, "আরবি/বিদেশি ভাষা স্প্যাম");
       const t = result === "muted"
-        ? muteMsg(firstName, "অপরিচিত/আরবি ভাষায় স্প্যাম")
+        ? muteMsg(firstName, "অপরিচিত ভাষায় স্প্যাম")
         : warnMsg(firstName, "আরবি/অপরিচিত ভাষায় মেসেজ নিষিদ্ধ", warnings.get(userId)?.count ?? 1);
       await sendTemp(chatId, t);
     }
     return;
   }
 
-  // ── Smart reply ───────────────────────────────────────────────────────────
+  // ── AI Smart Reply ────────────────────────────────────────────────────────
   if (mutedUsers.has(userId)) return;
 
-  const intent = detectIntent(text);
-  const replyText = buildReplyText(intent, firstName);
-  const keyboard = buildReplyKeyboard(intent);
+  // Determine keyboard based on message content
+  const lowerText = text.toLowerCase();
+  let keyboard = defaultKeyboard();
+  if (/মুভি|movie|নাটক|drama|series|film|ডাউনলোড|সিনেমা/i.test(lowerText)) {
+    keyboard = movieKeyboard();
+  } else if (/ব্যান|ban|block|মিউট|mute|kick|আনব্যান|unban/i.test(lowerText)) {
+    keyboard = adminKeyboard();
+  }
 
-  await sendTemp(chatId, replyText, {
+  // Get AI reply
+  const aiReply = await getAIReply(userId, text);
+
+  await sendTemp(chatId, aiReply, {
     reply_to_message_id: msgId,
     reply_markup: keyboard,
   });
