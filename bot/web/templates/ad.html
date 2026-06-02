@@ -1,0 +1,233 @@
+<!DOCTYPE html>
+<html lang="bn">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>মুভি পান — Moviex Hub</title>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+body{
+  min-height:100vh;
+  background:linear-gradient(135deg,#0f0f1a 0%,#1a0a2e 100%);
+  color:#e2e8f0;
+  font-family:'Segoe UI',system-ui,-apple-system,sans-serif;
+  display:flex;align-items:center;justify-content:center;
+  padding:1rem;
+}
+.card{
+  background:#1a1a2e;
+  border:1.5px solid #2d2d4e;
+  border-radius:22px;
+  padding:2.5rem 2rem;
+  max-width:430px;width:100%;
+  text-align:center;
+  box-shadow:0 24px 80px rgba(0,0,0,.6);
+  animation:fadeIn .4s ease;
+}
+@keyframes fadeIn{from{opacity:0;transform:translateY(16px)}to{opacity:1;transform:translateY(0)}}
+.logo{font-size:3rem;margin-bottom:.8rem;display:block}
+.movie-title{
+  font-size:1.25rem;font-weight:700;
+  color:#c084fc;
+  margin-bottom:.3rem;
+  line-height:1.4;
+  word-break:break-word;
+}
+.badge{
+  display:inline-block;
+  background:rgba(168,85,247,.15);
+  border:1px solid rgba(168,85,247,.3);
+  color:#a78bfa;
+  font-size:.75rem;font-weight:600;
+  padding:.2rem .7rem;border-radius:99px;
+  margin-bottom:1.8rem;letter-spacing:.04em;
+}
+
+/* ring */
+.ring-wrap{
+  position:relative;display:inline-flex;
+  align-items:center;justify-content:center;
+  margin-bottom:1.4rem;
+}
+.ring-svg{transform:rotate(-90deg)}
+.ring-bg{stroke:#252540}
+.ring-fg{
+  stroke:url(#grad);
+  stroke-linecap:round;
+  transition:stroke-dashoffset 1s linear;
+}
+.ring-inner{
+  position:absolute;text-align:center;
+}
+.ring-num{
+  font-size:2.6rem;font-weight:800;color:#fff;
+  line-height:1;font-variant-numeric:tabular-nums;
+}
+.ring-unit{font-size:.75rem;color:#6b6b8e;margin-top:.15rem;letter-spacing:.06em;text-transform:uppercase}
+
+/* progress */
+.pbar-wrap{
+  height:5px;background:#252540;border-radius:99px;
+  overflow:hidden;margin-bottom:1.6rem;
+}
+.pbar{
+  height:100%;
+  background:linear-gradient(90deg,#a855f7,#ec4899);
+  border-radius:99px;transition:width 1s linear;
+}
+
+/* info box */
+.info-box{
+  background:rgba(168,85,247,.07);
+  border:1px solid rgba(168,85,247,.2);
+  border-radius:12px;
+  padding:.85rem 1rem;
+  font-size:.85rem;color:#a78bfa;
+  margin-bottom:1.6rem;line-height:1.6;
+}
+.info-box strong{color:#c084fc}
+
+/* buttons */
+.btn{
+  display:block;width:100%;
+  padding:1rem 1.5rem;
+  border:none;border-radius:14px;
+  font-size:1.05rem;font-weight:700;
+  cursor:pointer;text-decoration:none;
+  transition:opacity .2s,transform .12s;
+}
+.btn-primary{
+  background:linear-gradient(135deg,#a855f7,#7c3aed);
+  color:#fff;
+  box-shadow:0 6px 24px rgba(168,85,247,.4);
+}
+.btn-primary:hover{opacity:.9;transform:translateY(-2px)}
+.btn-primary:active{transform:translateY(0)}
+.btn-disabled{
+  background:#252540;color:#4a4a6e;
+  pointer-events:none;cursor:not-allowed;
+  box-shadow:none;
+}
+
+/* error states */
+.err-icon{font-size:2.8rem;margin-bottom:.8rem}
+.err-title{font-size:1.2rem;font-weight:700;margin-bottom:.5rem}
+.err-box{
+  background:rgba(239,68,68,.08);
+  border:1px solid rgba(239,68,68,.22);
+  border-radius:12px;padding:1rem 1.2rem;
+  color:#f87171;font-size:.9rem;line-height:1.5;
+  margin-bottom:1.5rem;
+}
+.btn-back{
+  background:linear-gradient(135deg,#374151,#1f2937);
+  color:#d1d5db;box-shadow:none;
+}
+.btn-back:hover{opacity:.85;transform:translateY(-1px)}
+
+.footer{
+  margin-top:1.4rem;
+  font-size:.75rem;color:#3a3a5e;
+  letter-spacing:.04em;
+}
+</style>
+</head>
+<body>
+<div class="card">
+
+{% if used or not token_valid %}
+  <div class="err-icon">⚠️</div>
+  <div class="err-title" style="color:#f87171">লিংকটি ব্যবহার হয়ে গেছে</div>
+  <div class="err-box">এই লিংকটি আগেই ব্যবহার করা হয়েছে।<br>মুভি পেতে বটে ফিরে আবার সার্চ করুন।</div>
+  <a href="https://t.me/{{ bot_username }}" class="btn btn-back">🤖 বটে ফিরুন</a>
+
+{% elif expired %}
+  <div class="err-icon">⏰</div>
+  <div class="err-title" style="color:#fbbf24">লিংকের মেয়াদ শেষ</div>
+  <div class="err-box" style="background:rgba(251,191,36,.08);border-color:rgba(251,191,36,.22);color:#fbbf24">
+    এই লিংকটির মেয়াদ (২ ঘণ্টা) শেষ হয়ে গেছে।<br>মুভি পেতে বটে ফিরে আবার সার্চ করুন।
+  </div>
+  <a href="https://t.me/{{ bot_username }}" class="btn btn-back">🤖 বটে ফিরুন</a>
+
+{% else %}
+  <span class="logo">🎬</span>
+  <div class="movie-title">{{ title }}</div>
+  <span class="badge">Moviex Hub</span>
+
+  <svg style="display:none" width="0" height="0">
+    <defs>
+      <linearGradient id="grad" x1="0%" y1="0%" x2="100%" y2="0%">
+        <stop offset="0%" style="stop-color:#a855f7"/>
+        <stop offset="100%" style="stop-color:#ec4899"/>
+      </linearGradient>
+    </defs>
+  </svg>
+
+  <div class="ring-wrap">
+    <svg class="ring-svg" width="130" height="130" viewBox="0 0 130 130">
+      <circle class="ring-bg" cx="65" cy="65" r="56" fill="none" stroke-width="9"/>
+      <circle class="ring-fg" id="ring" cx="65" cy="65" r="56" fill="none" stroke-width="9"
+        stroke-dasharray="{{ circumference }}"
+        stroke-dashoffset="0"/>
+    </svg>
+    <div class="ring-inner">
+      <div class="ring-num" id="secs">{{ wait_secs }}</div>
+      <div class="ring-unit">সেকেন্ড</div>
+    </div>
+  </div>
+
+  <div class="pbar-wrap">
+    <div class="pbar" id="pbar" style="width:100%"></div>
+  </div>
+
+  <div class="info-box">
+    ⏳ সময় শেষ হলে <strong>মুভি পান</strong> বাটন চালু হবে।<br>
+    পেজ থেকে বের হলে মুভি পাবেন না।
+  </div>
+
+  <a id="btn-get" class="btn btn-disabled" href="#">
+    ⏳ অপেক্ষা করুন...
+  </a>
+{% endif %}
+
+  <div class="footer">🎬 Moviex Hub · @{{ bot_username }}</div>
+</div>
+
+{% if not used and not expired and token_valid %}
+<script>
+(function(){
+  var total = {{ wait_secs }};
+  var remaining = total;
+  var circum = {{ circumference }};
+  var ring = document.getElementById('ring');
+  var secsEl = document.getElementById('secs');
+  var pbar = document.getElementById('pbar');
+  var btn = document.getElementById('btn-get');
+  var tgLink = {{ tg_link | tojson }};
+
+  function tick(){
+    if(remaining <= 0){
+      secsEl.textContent = '0';
+      ring.style.strokeDashoffset = circum;
+      pbar.style.width = '0%';
+      btn.href = tgLink;
+      btn.className = 'btn btn-primary';
+      btn.textContent = '🎬 মুভি পান → Telegram খুলুন';
+      return;
+    }
+    remaining--;
+    secsEl.textContent = remaining;
+    var pct = remaining / total;
+    ring.style.strokeDashoffset = ((1 - pct) * circum);
+    pbar.style.width = (pct * 100) + '%';
+  }
+
+  var timer = setInterval(function(){
+    tick();
+    if(remaining <= 0) clearInterval(timer);
+  }, 1000);
+})();
+</script>
+{% endif %}
+</body>
+</html>

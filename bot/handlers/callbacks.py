@@ -7,9 +7,11 @@ import time
 
 from aiogram import F, Router
 from aiogram.exceptions import TelegramBadRequest
-from aiogram.types import CallbackQuery
+from aiogram.types import CallbackQuery, Message, InlineKeyboardButton
+from aiogram.utils.keyboard import InlineKeyboardBuilder
 
 from ..db import db
+from ..config import settings as cfg
 from ..middlewares.maintenance import build_maint_text, build_maint_kb
 from ..utils import esc, schedule_delete, MOVIE_TTL, MSG_TTL
 
@@ -102,6 +104,60 @@ async def deliver_movie(target, movie_id: int) -> None:
             await target.answer("❌ ফাইল পাঠানো যায়নি।", show_alert=True)
 
 
+async def send_ad_link(callback: CallbackQuery, movie_id: int) -> None:
+    """Ad system চালু থাকলে movie deliver না করে countdown link পাঠায়।"""
+    movie = await db.get_movie(movie_id)
+    if not movie:
+        await callback.answer("⚠️ এই ফাইলটি লাইব্রেরিতে আর নেই।", show_alert=True)
+        return
+
+    token = await db.create_ad_token(movie_id, callback.from_user.id)
+    public_url = cfg.public_url
+    ad_url = f"{public_url}/ad/{token}"
+    wait_secs = max(5, int(await db.get_setting("ad_wait_seconds", "30") or 30))
+
+    kb = InlineKeyboardBuilder()
+    kb.button(text=f"📺 বিজ্ঞাপন দেখুন ({wait_secs}s) → মুভি পান", url=ad_url)
+    kb.button(text="🏠 হোম", callback_data="home")
+    kb.adjust(1)
+
+    text = (
+        f"🎬 <b>{esc(movie['title'])}</b>\n\n"
+        f"⚡ মুভিটি পেতে নিচের বাটনে ক্লিক করুন।\n"
+        f"⏳ লিংকে <b>{wait_secs} সেকেন্ড</b> থাকুন, তারপর মুভি পাবেন।\n\n"
+        f"<i>💡 পেজ বন্ধ করলে মুভি আসবে না।</i>"
+    )
+
+    try:
+        await callback.message.edit_text(text, reply_markup=kb.as_markup())
+        sent = callback.message
+    except TelegramBadRequest:
+        sent = await callback.message.answer(text, reply_markup=kb.as_markup())
+    await callback.answer()
+    asyncio.create_task(
+        schedule_delete(callback.bot, callback.from_user.id, sent.message_id, MSG_TTL)
+    )
+
+
+async def deliver_movie_by_token(message: Message, token: str) -> None:
+    """Ad countdown শেষে /start get_{token} থেকে movie পাঠায়।"""
+    row = await db.get_ad_token(token)
+    if not row:
+        await message.answer("❌ লিংকটি আর কার্যকর নেই। আবার সার্চ করুন।")
+        return
+    if row["used"]:
+        await message.answer("⚠️ এই লিংকটি আগেই ব্যবহার হয়েছে। আবার সার্চ করুন।")
+        return
+    if time.time() > row["expires_at"]:
+        await message.answer("⏰ লিংকের মেয়াদ শেষ হয়ে গেছে (২ ঘণ্টা)। আবার সার্চ করুন।")
+        return
+    if row["user_id"] != message.from_user.id:
+        await message.answer("⛔ এই লিংকটি আপনার জন্য নয়।")
+        return
+    await db.mark_ad_token_used(token)
+    await deliver_movie(message, row["movie_id"])
+
+
 @router.callback_query(F.data.startswith("m:get:"))
 async def cb_get_movie(callback: CallbackQuery) -> None:
     try:
@@ -109,7 +165,12 @@ async def cb_get_movie(callback: CallbackQuery) -> None:
     except Exception:
         await callback.answer("ভুল আইডি।", show_alert=True)
         return
-    await deliver_movie(callback, movie_id)
+
+    ad_enabled = await db.get_setting("ad_enabled", "0")
+    if ad_enabled == "1" and cfg.public_url:
+        await send_ad_link(callback, movie_id)
+    else:
+        await deliver_movie(callback, movie_id)
 
 
 @router.callback_query(F.data == "maint:refresh")

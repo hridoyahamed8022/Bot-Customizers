@@ -190,6 +190,16 @@ CREATE TABLE IF NOT EXISTS search_log (
     created_at  REAL NOT NULL
 );
 CREATE INDEX IF NOT EXISTS search_log_created ON search_log(created_at DESC);
+
+CREATE TABLE IF NOT EXISTS ad_tokens (
+    token       TEXT PRIMARY KEY,
+    movie_id    INTEGER NOT NULL,
+    user_id     INTEGER NOT NULL,
+    created_at  REAL NOT NULL,
+    expires_at  REAL NOT NULL,
+    used        INTEGER NOT NULL DEFAULT 0
+);
+CREATE INDEX IF NOT EXISTS ad_tokens_expires ON ad_tokens(expires_at);
 """
 
 
@@ -1005,6 +1015,43 @@ class Database:
             "favorites": int(fav_count or 0),
             "subscribed": bool(sub_active and sub_active["active"]),
         }
+
+    # ------------------------------------------------------------------ #
+    # Ad Token system
+    # ------------------------------------------------------------------ #
+    async def create_ad_token(self, movie_id: int, user_id: int) -> str:
+        import secrets as _sec
+        token = _sec.token_urlsafe(24)
+        now = time.time()
+        expires = now + 7200
+        assert self._conn is not None
+        await self._conn.execute(
+            "INSERT INTO ad_tokens(token,movie_id,user_id,created_at,expires_at) VALUES(?,?,?,?,?)",
+            (token, movie_id, user_id, now, expires),
+        )
+        await self._conn.commit()
+        return token
+
+    async def get_ad_token(self, token: str) -> Optional[Dict]:
+        row = await self.fetch_one("SELECT * FROM ad_tokens WHERE token=?", (token,))
+        return dict(row) if row else None
+
+    async def mark_ad_token_used(self, token: str) -> None:
+        assert self._conn is not None
+        await self._conn.execute(
+            "UPDATE ad_tokens SET used=1 WHERE token=?", (token,)
+        )
+        await self._conn.commit()
+
+    async def count_ad_tokens_total(self) -> int:
+        val = await self.fetch_value("SELECT COUNT(*) FROM ad_tokens", ())
+        return int(val or 0)
+
+    async def count_ad_tokens_used(self) -> int:
+        val = await self.fetch_value(
+            "SELECT COUNT(*) FROM ad_tokens WHERE used=1", ()
+        )
+        return int(val or 0)
 
 
 db = Database()

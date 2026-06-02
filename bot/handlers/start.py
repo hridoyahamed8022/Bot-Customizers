@@ -106,6 +106,14 @@ async def cmd_start(
     await db.log_event("start", {"user_id": message.from_user.id, "is_new": is_new})
 
     payload = (command.args or "").strip()
+
+    # Ad system: /start get_{token} → deliver movie after countdown
+    if payload.startswith("get_"):
+        token = payload[4:]
+        from .callbacks import deliver_movie_by_token
+        await deliver_movie_by_token(message, token)
+        return
+
     if payload.startswith("movie_"):
         try:
             mid = int(payload.split("_", 1)[1])

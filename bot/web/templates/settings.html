@@ -140,6 +140,58 @@
   </form>
 </section>
 
+<!-- ══ বিজ্ঞাপন / Ad Monetization ══ -->
+<section class="card-block" id="ad-settings">
+  <h2>💰 বিজ্ঞাপন সিস্টেম (Ad Monetization)</h2>
+  <p class="muted">চালু থাকলে ইউজার মুভি বাটনে ক্লিক করলে সরাসরি ফাইল না পেয়ে একটি কাউন্টডাউন পেজে যাবে। নির্দিষ্ট সময় পর টেলিগ্রামে ফিরে মুভি পাবে।</p>
+
+  {% if flash %}{% endif %}
+
+  <form method="post" action="/settings/ad" class="form" style="gap:1rem">
+
+    <div style="display:flex;align-items:center;gap:.8rem;margin-bottom:.5rem">
+      <label class="toggle-wrap" style="display:flex;align-items:center;gap:.6rem;cursor:pointer">
+        <input type="checkbox" name="ad_enabled" id="ad_enabled" value="1"
+          {% if ad_enabled %}checked{% endif %}
+          style="width:1.2rem;height:1.2rem;cursor:pointer;accent-color:#a855f7">
+        <span style="font-weight:600;font-size:.95rem">বিজ্ঞাপন সিস্টেম চালু রাখুন</span>
+      </label>
+    </div>
+
+    <div style="display:flex;flex-wrap:wrap;gap:.8rem;align-items:flex-end">
+      <div style="flex:0 0 auto">
+        <label style="display:block;font-size:.82rem;color:var(--muted,#888);margin-bottom:.3rem">
+          ⏳ কাউন্টডাউন সময় (সেকেন্ড)
+        </label>
+        <input type="number" name="ad_wait_seconds" min="5" max="300"
+          value="{{ ad_wait_seconds or 30 }}"
+          style="width:120px;padding:.5rem .7rem;border-radius:8px;border:1.5px solid var(--border,#333);background:var(--bg-input,#111);color:inherit;font-size:.95rem">
+      </div>
+
+      <div style="flex:1;min-width:200px">
+        <label style="display:block;font-size:.82rem;color:var(--muted,#888);margin-bottom:.3rem">
+          🤖 বটের ইউজারনেম (@ ছাড়া)
+        </label>
+        <input type="text" name="bot_username" placeholder="Moviex_hub_bot"
+          value="{{ bot_username_setting or 'Moviex_hub_bot' }}"
+          style="width:100%;padding:.5rem .7rem;border-radius:8px;border:1.5px solid var(--border,#333);background:var(--bg-input,#111);color:inherit;font-size:.95rem">
+      </div>
+    </div>
+
+    <div class="hint" style="background:rgba(168,85,247,.07);border-color:rgba(168,85,247,.2);color:#a78bfa;font-size:.83rem;padding:.6rem .9rem;border-radius:8px">
+      💡 <b>কীভাবে কাজ করে:</b> ইউজার মুভি বাটনে ক্লিক → কাউন্টডাউন পেজ খোলে → {{ ad_wait_seconds or 30 }}s পরে "মুভি পান" বাটন চালু → টেলিগ্রামে ফিরে মুভি পায়।
+    </div>
+
+    <button type="submit" class="btn primary">💾 সেটিংস সেভ করুন</button>
+  </form>
+
+  {% if ad_enabled and public_url %}
+  <div class="hint" style="margin-top:.75rem">
+    🔗 কাউন্টডাউন পেজের URL: <code>{{ public_url }}/ad/{token}</code>
+  </div>
+  {% endif %}
+</section>
+
 <!-- ══ ব্যান লিস্ট ══ -->
 <section class="card-block" id="bans">
   <h2>⛔ ব্যান লিস্ট</h2>

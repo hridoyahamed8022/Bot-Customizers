@@ -1079,7 +1079,11 @@ async def maintenance_toggle(request: web.Request) -> web.Response:
 @require_admin
 async def settings_page(request: web.Request) -> web.Response:
     import time as _time
-    fj, bans, verified_count, channel_count, maintenance_on, maintenance_until, disc_url = await asyncio.gather(
+    (
+        fj, bans, verified_count, channel_count,
+        maintenance_on, maintenance_until, disc_url,
+        ad_enabled_val, ad_wait_secs_val, bot_username_val,
+    ) = await asyncio.gather(
         db.list_force_join(),
         db.list_bans(),
         db.fetch_value("SELECT COUNT(*) FROM users WHERE verified = 1"),
@@ -1087,6 +1091,9 @@ async def settings_page(request: web.Request) -> web.Response:
         db.is_maintenance(),
         db.get_maintenance_until(),
         db.get_discussion_url(),
+        db.get_setting("ad_enabled", "0"),
+        db.get_setting("ad_wait_seconds", "30"),
+        db.get_setting("bot_username", "Moviex_hub_bot"),
     )
     # Auto-expire check
     now = _time.time()
@@ -1110,6 +1117,10 @@ async def settings_page(request: web.Request) -> web.Response:
             "maintenance_until": maintenance_until,
             "discussion_url": disc_url,
             "flash": _read_flash(request),
+            "ad_enabled": (ad_enabled_val == "1"),
+            "ad_wait_seconds": int(ad_wait_secs_val or 30),
+            "bot_username_setting": bot_username_val or "Moviex_hub_bot",
+            "public_url": settings.public_url,
         },
     )
 
@@ -1186,6 +1197,71 @@ async def settings_ban(request: web.Request) -> web.Response:
 
 
 # ──────────────────────────────────────────────────────────────── #
+# Ad Page (public — no auth)
+# ──────────────────────────────────────────────────────────────── #
+import math as _math
+
+async def ad_page(request: web.Request) -> web.Response:
+    token = request.match_info["token"]
+    row = await db.get_ad_token(token)
+
+    bot_username = await db.get_setting("bot_username", "Moviex_hub_bot")
+    wait_secs = max(5, int(await db.get_setting("ad_wait_seconds", "30") or 30))
+    circumference = round(2 * _math.pi * 56, 2)
+
+    if not row:
+        return aiohttp_jinja2.render_template(
+            "ad.html", request,
+            {"token_valid": False, "used": False, "expired": False,
+             "title": "", "bot_username": bot_username,
+             "wait_secs": wait_secs, "circumference": circumference, "tg_link": ""},
+        )
+
+    import time as _time
+    if row["used"]:
+        return aiohttp_jinja2.render_template(
+            "ad.html", request,
+            {"token_valid": True, "used": True, "expired": False,
+             "title": "", "bot_username": bot_username,
+             "wait_secs": wait_secs, "circumference": circumference, "tg_link": ""},
+        )
+
+    if _time.time() > row["expires_at"]:
+        return aiohttp_jinja2.render_template(
+            "ad.html", request,
+            {"token_valid": True, "used": False, "expired": True,
+             "title": "", "bot_username": bot_username,
+             "wait_secs": wait_secs, "circumference": circumference, "tg_link": ""},
+        )
+
+    movie = await db.get_movie(row["movie_id"])
+    title = movie["title"] if movie else "মুভি"
+    tg_link = f"https://t.me/{bot_username}?start=get_{token}"
+
+    return aiohttp_jinja2.render_template(
+        "ad.html", request,
+        {"token_valid": True, "used": False, "expired": False,
+         "title": title, "bot_username": bot_username,
+         "wait_secs": wait_secs, "circumference": circumference, "tg_link": tg_link},
+    )
+
+
+@require_admin
+async def settings_ad_save(request: web.Request) -> web.Response:
+    data = await request.post()
+    ad_enabled = "1" if data.get("ad_enabled") else "0"
+    try:
+        wait_secs = max(5, min(300, int(data.get("ad_wait_seconds") or 30)))
+    except (ValueError, TypeError):
+        wait_secs = 30
+    bot_username = (data.get("bot_username") or "Moviex_hub_bot").strip().lstrip("@")
+    await db.set_setting("ad_enabled", ad_enabled)
+    await db.set_setting("ad_wait_seconds", str(wait_secs))
+    await db.set_setting("bot_username", bot_username)
+    return _js_redirect("/settings" + _flash(request, "বিজ্ঞাপন সেটিংস সেভ হয়েছে! ✅", "ok"))
+
+
+# ──────────────────────────────────────────────────────────────── #
 # Route wiring
 # ──────────────────────────────────────────────────────────────── #
 def setup_routes(app: web.Application) -> None:
@@ -1239,6 +1315,10 @@ def setup_routes(app: web.Application) -> None:
     app.router.add_post("/settings/fj/del", settings_fj_del)
     app.router.add_post("/settings/ban", settings_ban)
     app.router.add_post("/settings/verify/reset", settings_reset_verifications)
+    app.router.add_post("/settings/ad", settings_ad_save)
+
+    # Ad page — public, no auth
+    app.router.add_get("/ad/{token}", ad_page)
 
     if _STATIC_DIR.exists():
         app.router.add_static("/static/", _STATIC_DIR, show_index=False)
