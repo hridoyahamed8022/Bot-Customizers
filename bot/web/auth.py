@@ -10,11 +10,9 @@ from ..config import settings
 from ..db import db
 
 COOKIE_NAME = "admin_session"
-SESSION_USER_ID = 0  # symbolic — we use one logical "admin" account
 
 
 def check_credentials(username: str, password: str) -> bool:
-    """Constant-time check against ADMIN_USERNAME / ADMIN_PASSWORD."""
     if not (settings.admin_username and settings.admin_password):
         return False
     u_ok = hmac.compare_digest(
@@ -45,19 +43,19 @@ def require_admin(handler):
         if not request.get("is_admin"):
             raise web.HTTPFound("/login")
         return await handler(request)
-
     wrapper.__name__ = handler.__name__
     return wrapper
 
 
 def set_session_cookie(response: web.StreamResponse, token: str) -> None:
+    # SameSite=None + Secure=True — Replit HTTPS proxy-র জন্য দরকার
     response.set_cookie(
         COOKIE_NAME,
         token,
-        max_age=10 * 365 * 24 * 3600,  # 10 years — effectively permanent
+        max_age=10 * 365 * 24 * 3600,
         httponly=True,
-        secure=False,  # Replit terminates TLS at the proxy
-        samesite="Lax",
+        secure=True,
+        samesite="None",
         path="/",
     )
 

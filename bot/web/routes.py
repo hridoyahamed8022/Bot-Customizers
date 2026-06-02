@@ -175,6 +175,14 @@ def _read_flash(request: web.Request) -> Optional[Dict[str, str]]:
     return {"msg": msg, "kind": request.query.get("kind", "info")}
 
 
+def _js_redirect(url: str) -> web.Response:
+    """Replit proxy-তে HTTPFound redirect কাজ করে না, JS দিয়ে redirect করি।"""
+    html = f"""<!doctype html><html><head><meta charset="utf-8">
+<script>window.location.replace({json.dumps(url)});</script>
+</head><body>রিডাইরেক্ট হচ্ছে...</body></html>"""
+    return web.Response(text=html, content_type="text/html")
+
+
 # ──────────────────────────────────────────────────────────────── #
 # Public routes
 # ──────────────────────────────────────────────────────────────── #
@@ -184,7 +192,7 @@ async def health(request: web.Request) -> web.Response:
 
 async def login_get(request: web.Request) -> web.StreamResponse:
     if request.get("is_admin"):
-        raise web.HTTPFound("/")
+        return _js_redirect("/")
     return aiohttp_jinja2.render_template("login.html", request, {"error": None})
 
 
@@ -207,19 +215,26 @@ async def login_post(request: web.Request) -> web.StreamResponse:
         )
 
     session_token = await db.issue_session(user_id=1, ttl_seconds=10 * 365 * 24 * 3600)
-    response = web.HTTPFound("/")
-    set_session_cookie(response, session_token)
     await db.log_event("login_ok", {"username": username})
-    raise response
+    # SameSite=None cookie + JS redirect — Replit proxy-তে HTTPFound redirect কাজ করে না
+    html = """<!doctype html><html><head><meta charset="utf-8">
+<script>window.location.replace('/');</script>
+</head><body>লগইন হচ্ছে...</body></html>"""
+    response = web.Response(
+        text=html,
+        content_type="text/html",
+    )
+    set_session_cookie(response, session_token)
+    return response
 
 
 async def logout(request: web.Request) -> web.Response:
     token = request.cookies.get("admin_session")
     if token:
         await db.revoke_session(token)
-    response = web.HTTPFound("/login")
+    response = _js_redirect("/login")
     clear_session_cookie(response)
-    raise response
+    return response
 
 
 # ──────────────────────────────────────────────────────────────── #
@@ -288,10 +303,10 @@ async def movie_delete(request: web.Request) -> web.Response:
     try:
         mid = int(data.get("id"))
     except (TypeError, ValueError):
-        raise web.HTTPFound("/movies")
+        return _js_redirect("/movies")
     await db.delete_movie(mid)
     await db.log_event("movie_delete", {"id": mid, "by": request["user_id"]})
-    raise web.HTTPFound("/movies" + _flash(request, "মুভি মুছে ফেলা হয়েছে।", "ok"))
+    return _js_redirect("/movies" + _flash(request, "মুভি মুছে ফেলা হয়েছে।", "ok"))
 
 
 # ──────────────────────────────────────────────────────────────── #
@@ -344,11 +359,11 @@ async def post_submit(request: web.Request) -> web.Response:
         try:
             target_chat = int(chat_id_raw)
         except ValueError:
-            raise web.HTTPFound("/post" + _flash(request, "Chat id অবশ্যই সংখ্যা হতে হবে।", "err"))
+            return _js_redirect("/post" + _flash(request, "Chat id অবশ্যই সংখ্যা হতে হবে।", "err"))
     elif settings.request_group_id:
         target_chat = settings.request_group_id
     else:
-        raise web.HTTPFound("/post" + _flash(request, "কোনো চ্যানেল/গ্রুপ নির্বাচন করুন।", "err"))
+        return _js_redirect("/post" + _flash(request, "কোনো চ্যানেল/গ্রুপ নির্বাচন করুন।", "err"))
 
     kb = _parse_buttons(buttons_raw)
 
@@ -359,14 +374,14 @@ async def post_submit(request: web.Request) -> web.Response:
             media_kind=media_kind, reply_markup=kb,
         )
         await db.log_event("panel_post", {"chat_id": target_chat, "by": request["user_id"], "kind": media_kind})
-        raise web.HTTPFound("/post" + _flash(request, "✅ পোস্ট পাঠানো হয়েছে!", "ok"))
+        return _js_redirect("/post" + _flash(request, "✅ পোস্ট পাঠানো হয়েছে!", "ok"))
     except web.HTTPFound:
         raise
     except (TelegramBadRequest, TelegramForbiddenError) as exc:
-        raise web.HTTPFound("/post" + _flash(request, f"Telegram error: {exc}", "err"))
+        return _js_redirect("/post" + _flash(request, f"Telegram error: {exc}", "err"))
     except Exception as exc:
         log.exception("post failed")
-        raise web.HTTPFound("/post" + _flash(request, f"ত্রুটি: {exc}", "err"))
+        return _js_redirect("/post" + _flash(request, f"ত্রুটি: {exc}", "err"))
 
 
 # ──────────────────────────────────────────────────────────────── #
@@ -467,7 +482,7 @@ async def broadcast_submit(request: web.Request) -> web.Response:
     bot = request.app["bot"]
     user_id = request["user_id"]
     if user_id in _active_broadcasts and not _active_broadcasts[user_id].get("finished"):
-        raise web.HTTPFound("/broadcast" + _flash(request, "ব্রডকাস্ট চলছে — শেষ হওয়া পর্যন্ত অপেক্ষা করুন।", "err"))
+        return _js_redirect("/broadcast" + _flash(request, "ব্রডকাস্ট চলছে — শেষ হওয়া পর্যন্ত অপেক্ষা করুন।", "err"))
 
     reader = await request.multipart()
     text = ""
@@ -489,11 +504,11 @@ async def broadcast_submit(request: web.Request) -> web.Response:
                 media_filename = part.filename
 
     if not (text.strip() or media_bytes):
-        raise web.HTTPFound("/broadcast" + _flash(request, "মেসেজ বা মিডিয়া দিতে হবে।", "err"))
+        return _js_redirect("/broadcast" + _flash(request, "মেসেজ বা মিডিয়া দিতে হবে।", "err"))
 
     targets = await db.all_user_ids()
     if not targets:
-        raise web.HTTPFound("/broadcast" + _flash(request, "কোনো ইউজার নেই।", "err"))
+        return _js_redirect("/broadcast" + _flash(request, "কোনো ইউজার নেই।", "err"))
 
     kb = _parse_buttons(buttons_raw)
     _active_broadcasts[user_id] = {
@@ -503,7 +518,7 @@ async def broadcast_submit(request: web.Request) -> web.Response:
     asyncio.create_task(
         _broadcast_worker(bot, user_id, targets, text, media_bytes, media_filename, media_kind, kb)
     )
-    raise web.HTTPFound("/broadcast")
+    return _js_redirect("/broadcast")
 
 
 @require_admin
@@ -541,7 +556,7 @@ async def requests_resolve(request: web.Request) -> web.Response:
     try:
         req_id = int(data.get("id"))
     except (TypeError, ValueError):
-        raise web.HTTPFound("/requests")
+        return _js_redirect("/requests")
 
     status = data.get("status", "done")
     if status not in ("done", "rejected"):
@@ -603,7 +618,7 @@ async def requests_resolve(request: web.Request) -> web.Response:
             asyncio.create_task(_silent_send(bot, user_id, text, search_kb))
 
     label = "✅ সম্পন্ন" if status == "done" else "❌ বাতিল"
-    raise web.HTTPFound("/requests" + _flash(request, f"রিকোয়েস্ট #{req_id} → {label} (নোটিফিকেশন পাঠানো হচ্ছে…)", "ok"))
+    return _js_redirect("/requests" + _flash(request, f"রিকোয়েস্ট #{req_id} → {label} (নোটিফিকেশন পাঠানো হচ্ছে…)", "ok"))
 
 
 @require_admin
@@ -613,7 +628,7 @@ async def requests_delete(request: web.Request) -> web.Response:
     try:
         req_id = int(data.get("id"))
     except (TypeError, ValueError):
-        raise web.HTTPFound("/requests")
+        return _js_redirect("/requests")
 
     # Fetch BEFORE deleting
     req_row = await db.fetch_one("SELECT * FROM movie_requests WHERE id=?", (req_id,))
@@ -635,7 +650,7 @@ async def requests_delete(request: web.Request) -> web.Response:
         )
         asyncio.create_task(_silent_send(bot, user_id, text, home_kb))
 
-    raise web.HTTPFound("/requests" + _flash(request, f"রিকোয়েস্ট #{req_id} ডিলিট হয়েছে (নোটিফিকেশন পাঠানো হচ্ছে…)।", "ok"))
+    return _js_redirect("/requests" + _flash(request, f"রিকোয়েস্ট #{req_id} ডিলিট হয়েছে (নোটিফিকেশন পাঠানো হচ্ছে…)।", "ok"))
 
 
 # ──────────────────────────────────────────────────────────────── #
@@ -661,10 +676,10 @@ async def bot_messages_save(request: web.Request) -> web.Response:
     text = data.get("text") or ""
     valid_keys = {c["key"] for c in BOT_MESSAGES_CONFIG}
     if key not in valid_keys:
-        raise web.HTTPFound("/bot-messages" + _flash(request, "অবৈধ মেসেজ কী।", "err"))
+        return _js_redirect("/bot-messages" + _flash(request, "অবৈধ মেসেজ কী।", "err"))
     await db.set_bot_message(key, text)
     await db.log_event("bot_msg_edit", {"key": key, "by": request["user_id"]})
-    raise web.HTTPFound("/bot-messages" + _flash(request, f"✅ '{key}' মেসেজ সংরক্ষিত হয়েছে।", "ok"))
+    return _js_redirect("/bot-messages" + _flash(request, f"✅ '{key}' মেসেজ সংরক্ষিত হয়েছে।", "ok"))
 
 
 @require_admin
@@ -673,9 +688,9 @@ async def bot_messages_reset(request: web.Request) -> web.Response:
     key = (data.get("key") or "").strip()
     valid = {c["key"]: c["default"] for c in BOT_MESSAGES_CONFIG}
     if key not in valid:
-        raise web.HTTPFound("/bot-messages" + _flash(request, "অবৈধ মেসেজ কী।", "err"))
+        return _js_redirect("/bot-messages" + _flash(request, "অবৈধ মেসেজ কী।", "err"))
     await db.set_bot_message(key, valid[key])
-    raise web.HTTPFound("/bot-messages" + _flash(request, f"✅ '{key}' ডিফল্টে ফেরানো হয়েছে।", "ok"))
+    return _js_redirect("/bot-messages" + _flash(request, f"✅ '{key}' ডিফল্টে ফেরানো হয়েছে।", "ok"))
 
 
 # ──────────────────────────────────────────────────────────────── #
@@ -705,7 +720,7 @@ async def channels_add(request: web.Request) -> web.Response:
     try:
         chat_id = int(chat_raw)
     except ValueError:
-        raise web.HTTPFound("/channels" + _flash(request, "Chat ID অবশ্যই সংখ্যা হতে হবে।", "err"))
+        return _js_redirect("/channels" + _flash(request, "Chat ID অবশ্যই সংখ্যা হতে হবে।", "err"))
 
     bot = request.app["bot"]
     try:
@@ -724,7 +739,7 @@ async def channels_add(request: web.Request) -> web.Response:
 
     await db.add_channel(chat_id, title=title, username=username, invite_url=invite, type=ch_type)
     await db.log_event("channel_add", {"chat_id": chat_id, "type": ch_type, "by": request["user_id"]})
-    raise web.HTTPFound("/channels" + _flash(request, f"✅ চ্যানেল/গ্রুপ যোগ হয়েছে: {title or chat_id}", "ok"))
+    return _js_redirect("/channels" + _flash(request, f"✅ চ্যানেল/গ্রুপ যোগ হয়েছে: {title or chat_id}", "ok"))
 
 
 @require_admin
@@ -733,9 +748,9 @@ async def channels_del(request: web.Request) -> web.Response:
     try:
         chat_id = int(data.get("chat_id"))
     except (TypeError, ValueError):
-        raise web.HTTPFound("/channels")
+        return _js_redirect("/channels")
     await db.remove_channel(chat_id)
-    raise web.HTTPFound("/channels" + _flash(request, "চ্যানেল/গ্রুপ সরানো হয়েছে।", "ok"))
+    return _js_redirect("/channels" + _flash(request, "চ্যানেল/গ্রুপ সরানো হয়েছে।", "ok"))
 
 
 # ──────────────────────────────────────────────────────────────── #
@@ -809,13 +824,13 @@ async def user_ban(request: web.Request) -> web.Response:
     try:
         target_uid = int(data.get("user_id"))
     except (TypeError, ValueError):
-        raise web.HTTPFound("/users" + _flash(request, "ভুল ইউজার আইডি।", "err"))
+        return _js_redirect("/users" + _flash(request, "ভুল ইউজার আইডি।", "err"))
 
     action = (data.get("action") or "ban").strip()
     if action == "unban":
         await db.unban(target_uid)
         await db.log_event("user_unban", {"uid": target_uid, "by": request["user_id"]})
-        raise web.HTTPFound("/users" + _flash(request, f"✅ ইউজার #{target_uid}-এর ব্যান তুলে নেওয়া হয়েছে।", "ok"))
+        return _js_redirect("/users" + _flash(request, f"✅ ইউজার #{target_uid}-এর ব্যান তুলে নেওয়া হয়েছে।", "ok"))
 
     # ban
     reason = (data.get("reason") or "").strip()
@@ -857,7 +872,7 @@ async def user_ban(request: web.Request) -> web.Response:
     except Exception:
         pass
 
-    raise web.HTTPFound("/users" + _flash(request, msg, "ok"))
+    return _js_redirect("/users" + _flash(request, msg, "ok"))
 
 
 @require_admin
@@ -896,11 +911,11 @@ async def user_send_dm(request: web.Request) -> web.Response:
     try:
         target_uid = int(target_uid_raw)
     except (TypeError, ValueError):
-        raise web.HTTPFound("/users" + _flash(request, "ভুল ইউজার আইডি।", "err"))
+        return _js_redirect("/users" + _flash(request, "ভুল ইউজার আইডি।", "err"))
 
     text = text.strip()
     if not text and not photo_bytes:
-        raise web.HTTPFound("/users" + _flash(request, "মেসেজ বা ছবি দিতে হবে।", "err"))
+        return _js_redirect("/users" + _flash(request, "মেসেজ বা ছবি দিতে হবে।", "err"))
 
     kb = _parse_buttons(buttons_raw) if buttons_raw.strip() else None
 
@@ -917,13 +932,13 @@ async def user_send_dm(request: web.Request) -> web.Response:
         else:
             await bot.send_message(target_uid, text, reply_markup=kb)
         await db.log_event("admin_dm", {"to": target_uid, "by": request["user_id"]})
-        raise web.HTTPFound("/users" + _flash(request, f"✅ ইউজার #{target_uid}-কে মেসেজ পাঠানো হয়েছে।", "ok"))
+        return _js_redirect("/users" + _flash(request, f"✅ ইউজার #{target_uid}-কে মেসেজ পাঠানো হয়েছে।", "ok"))
     except web.HTTPFound:
         raise
     except TelegramForbiddenError:
-        raise web.HTTPFound("/users" + _flash(request, "ইউজার বটকে ব্লক করেছে — মেসেজ পাঠানো যায়নি।", "err"))
+        return _js_redirect("/users" + _flash(request, "ইউজার বটকে ব্লক করেছে — মেসেজ পাঠানো যায়নি।", "err"))
     except Exception as exc:
-        raise web.HTTPFound("/users" + _flash(request, f"ত্রুটি: {exc}", "err"))
+        return _js_redirect("/users" + _flash(request, f"ত্রুটি: {exc}", "err"))
 
 
 # ──────────────────────────────────────────────────────────────── #
@@ -1037,7 +1052,7 @@ async def maintenance_toggle(request: web.Request) -> web.Response:
     if action == "off":
         await db.set_maintenance_timed(False)
         await db.log_event("maintenance_toggle", {"on": False, "by": request["user_id"]})
-        raise web.HTTPFound("/settings" + _flash(request, "✅ মেইনটেনেন্স মোড বন্ধ করা হয়েছে।", "ok"))
+        return _js_redirect("/settings" + _flash(request, "✅ মেইনটেনেন্স মোড বন্ধ করা হয়েছে।", "ok"))
 
     # Turn ON with duration
     try:
@@ -1055,7 +1070,7 @@ async def maintenance_toggle(request: web.Request) -> web.Response:
     # Broadcast in background
     asyncio.create_task(_broadcast_maintenance(bot, duration_mins))
 
-    raise web.HTTPFound("/settings" + _flash(request, f"🔧 মেইনটেনেন্স মোড চালু — {duration_mins} মিনিটের জন্য। সব ইউজারকে জানানো হচ্ছে।", "warn"))
+    return _js_redirect("/settings" + _flash(request, f"🔧 মেইনটেনেন্স মোড চালু — {duration_mins} মিনিটের জন্য। সব ইউজারকে জানানো হচ্ছে।", "warn"))
 
 
 # ──────────────────────────────────────────────────────────────── #
@@ -1105,14 +1120,14 @@ async def settings_discussion_save(request: web.Request) -> web.Response:
     url = (data.get("url") or "").strip()
     await db.set_discussion_url(url)
     await db.log_event("discussion_url_update", {"url": url, "by": request["user_id"]})
-    raise web.HTTPFound("/settings" + _flash(request, "✅ ডিসকাশন গ্রুপ লিংক সেভ হয়েছে।", "ok"))
+    return _js_redirect("/settings" + _flash(request, "✅ ডিসকাশন গ্রুপ লিংক সেভ হয়েছে।", "ok"))
 
 
 @require_admin
 async def settings_reset_verifications(request: web.Request) -> web.Response:
     await db.reset_all_verifications()
     await db.log_event("verifications_reset", {"by": request["user_id"]})
-    raise web.HTTPFound("/settings" + _flash(request, "সব ইউজারের ভেরিফিকেশন রিসেট হয়েছে।", "ok"))
+    return _js_redirect("/settings" + _flash(request, "সব ইউজারের ভেরিফিকেশন রিসেট হয়েছে।", "ok"))
 
 
 @require_admin
@@ -1125,7 +1140,7 @@ async def settings_fj_add(request: web.Request) -> web.Response:
     try:
         chat_id = int(chat_raw)
     except ValueError:
-        raise web.HTTPFound("/settings" + _flash(request, "Chat id অবশ্যই সংখ্যা হতে হবে।", "err"))
+        return _js_redirect("/settings" + _flash(request, "Chat id অবশ্যই সংখ্যা হতে হবে।", "err"))
     bot = request.app["bot"]
     try:
         info = await bot.get_chat(chat_id)
@@ -1141,7 +1156,7 @@ async def settings_fj_add(request: web.Request) -> web.Response:
     except Exception:
         pass
     await db.add_force_join(chat_id, title=title, username=username, invite_url=invite)
-    raise web.HTTPFound("/settings" + _flash(request, "✅ ভেরিফিকেশন চ্যানেল যোগ হয়েছে।", "ok"))
+    return _js_redirect("/settings" + _flash(request, "✅ ভেরিফিকেশন চ্যানেল যোগ হয়েছে।", "ok"))
 
 
 @require_admin
@@ -1150,9 +1165,9 @@ async def settings_fj_del(request: web.Request) -> web.Response:
     try:
         chat_id = int(data.get("chat_id"))
     except (TypeError, ValueError):
-        raise web.HTTPFound("/settings")
+        return _js_redirect("/settings")
     await db.remove_force_join(chat_id)
-    raise web.HTTPFound("/settings" + _flash(request, "সরানো হয়েছে।", "ok"))
+    return _js_redirect("/settings" + _flash(request, "সরানো হয়েছে।", "ok"))
 
 
 @require_admin
@@ -1162,12 +1177,12 @@ async def settings_ban(request: web.Request) -> web.Response:
     try:
         uid = int(data.get("user_id"))
     except (TypeError, ValueError):
-        raise web.HTTPFound("/settings")
+        return _js_redirect("/settings")
     if action == "ban":
         await db.ban(uid, reason=(data.get("reason") or "").strip())
     elif action == "unban":
         await db.unban(uid)
-    raise web.HTTPFound("/settings" + _flash(request, "আপডেট হয়েছে।", "ok"))
+    return _js_redirect("/settings" + _flash(request, "আপডেট হয়েছে।", "ok"))
 
 
 # ──────────────────────────────────────────────────────────────── #
