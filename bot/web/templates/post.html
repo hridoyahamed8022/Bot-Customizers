@@ -1,0 +1,117 @@
+{% extends "base.html" %}
+{% block title %}গ্রুপে পোস্ট{% endblock %}
+{% block content %}
+<h1>গ্রুপে পোস্ট পাঠান</h1>
+<p class="muted">যেকোনো চ্যানেল বা গ্রুপে মেসেজ / মিডিয়া পাঠান।</p>
+
+{% if flash %}
+<div class="flash flash-{{ flash.kind }}">{{ flash.msg }}</div>
+{% endif %}
+
+<form method="post" enctype="multipart/form-data" class="form" id="postForm">
+
+  <label>
+    টার্গেট চ্যানেল / গ্রুপ
+    {% if channels %}
+    <select id="channelSelect" onchange="onChannelSelect(this)">
+      <option value="">— কাস্টম আইডি লিখুন —</option>
+      {% if request_group_id %}
+      <option value="{{ request_group_id }}">🏠 রিকোয়েস্ট গ্রুপ ({{ request_group_id }})</option>
+      {% endif %}
+      {% for c in channels %}
+      <option value="{{ c.chat_id }}">
+        {% if c.type == 'backup' %}🔔{% elif c.type == 'group' %}🗣{% else %}📢{% endif %}
+        {{ c.title or c.chat_id }} ({{ c.chat_id }})
+      </option>
+      {% endfor %}
+    </select>
+    {% endif %}
+    <input type="text" name="chat_id" id="chatIdInput"
+           placeholder="{{ request_group_id or '-100xxxxxxxxxx' }}"
+           value="{{ request_group_id or '' }}">
+    <small>উপর থেকে বেছে নিন অথবা সরাসরি Chat ID লিখুন। <a href="/channels">চ্যানেল ম্যানেজার →</a></small>
+  </label>
+
+  <label>
+    মেসেজ টেক্সট / ক্যাপশন (HTML সাপোর্টেড)
+    <textarea name="text" rows="5" placeholder="নতুন মুভি যোগ হয়েছে — &lt;b&gt;Avengers&lt;/b&gt;"></textarea>
+    <small>Telegram HTML: &lt;b&gt;, &lt;i&gt;, &lt;a href&gt;, &lt;code&gt;, &lt;u&gt;, &lt;s&gt;</small>
+  </label>
+
+  <label>
+    মিডিয়া (ঐচ্ছিক)
+    <select name="media_kind">
+      <option value="none">কোনো মিডিয়া নয়</option>
+      <option value="photo">ছবি</option>
+      <option value="video">ভিডিও</option>
+      <option value="document">ডকুমেন্ট</option>
+    </select>
+    <input type="file" name="media" style="margin-top:.4rem">
+  </label>
+
+  <div class="form-group">
+    <label style="margin-bottom:.4rem;display:block">ইনলাইন বাটন (ঐচ্ছিক)</label>
+    <small class="muted">প্রতিটি বাটনের জন্য নাম ও লিংক আলাদা করে দিন। একই সারিতে একাধিক বাটন রাখতে "একই সারি" চেক করুন।</small>
+    <div id="buttonRows" style="margin-top:.5rem"></div>
+    <button type="button" onclick="addButtonRow()" class="btn ghost" style="margin-top:.5rem">➕ বাটন যোগ করুন</button>
+    <textarea name="buttons" id="buttonsHidden" style="display:none"></textarea>
+  </div>
+
+  <div class="actions">
+    <button type="submit" class="btn primary" onclick="serializeButtons()">📤 পাঠান</button>
+  </div>
+</form>
+
+<style>
+.btn-row{display:flex;gap:.4rem;align-items:center;margin-bottom:.4rem;flex-wrap:wrap}
+.btn-row input[type=text]{flex:1;min-width:120px}
+.btn-row label{display:flex;align-items:center;gap:.25rem;font-size:.8rem;white-space:nowrap}
+</style>
+
+<script>
+let rowCount = 0;
+
+function addButtonRow(text='', url='', sameRow=false) {
+  const id = rowCount++;
+  const div = document.createElement('div');
+  div.className = 'btn-row';
+  div.id = 'brow_' + id;
+  div.innerHTML = `
+    <input type="text" placeholder="বাটনের নাম" value="${esc(text)}" class="btext" style="max-width:160px">
+    <input type="text" placeholder="https://..." value="${esc(url)}" class="burl">
+    <label><input type="checkbox" class="bsame" ${sameRow?'checked':''}> একই সারি</label>
+    <button type="button" onclick="removeRow('brow_${id}')" class="btn danger" style="padding:.2rem .5rem">✕</button>
+  `;
+  document.getElementById('buttonRows').appendChild(div);
+}
+
+function removeRow(id){ const el=document.getElementById(id); if(el) el.remove(); }
+
+function esc(s){ return (s||'').replace(/&/g,'&amp;').replace(/"/g,'&quot;'); }
+
+function serializeButtons(){
+  const rows = document.querySelectorAll('#buttonRows .btn-row');
+  const lines = [];
+  let curLine = [];
+  rows.forEach((row, i) => {
+    const text = row.querySelector('.btext').value.trim();
+    const url = row.querySelector('.burl').value.trim();
+    const same = row.querySelector('.bsame').checked;
+    if(!text || !url) return;
+    if(i === 0 || !same){
+      if(curLine.length) lines.push(curLine.join(' && '));
+      curLine = [text + ' - ' + url];
+    } else {
+      curLine.push(text + ' - ' + url);
+    }
+  });
+  if(curLine.length) lines.push(curLine.join(' && '));
+  document.getElementById('buttonsHidden').value = lines.join('\n');
+}
+
+function onChannelSelect(sel){
+  const val = sel.value;
+  document.getElementById('chatIdInput').value = val;
+}
+</script>
+{% endblock %}

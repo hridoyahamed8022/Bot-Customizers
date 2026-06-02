@@ -1,0 +1,44 @@
+<!doctype html>
+<html lang="bn">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{% block title %}অ্যাডমিন প্যানেল{% endblock %} · মুভি বট</title>
+  <link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+{% if request.is_admin %}
+<header class="topbar">
+  <div class="topbar-row1">
+    <div class="brand">🎬 <strong>মুভি বট</strong></div>
+    <form action="/logout" method="post" class="logout" style="margin:0">
+      <button type="submit" class="btn ghost" style="padding:.28rem .65rem;font-size:.82rem">লগ আউট</button>
+    </form>
+  </div>
+  <nav>
+    <a href="/" {% if request.path == '/' %}class="active"{% endif %}>ড্যাশবোর্ড</a>
+    <a href="/movies" {% if request.path.startswith('/movies') %}class="active"{% endif %}>মুভি</a>
+    <a href="/post" {% if request.path.startswith('/post') %}class="active"{% endif %}>পোস্ট</a>
+    <a href="/broadcast" {% if request.path.startswith('/broadcast') %}class="active"{% endif %}>ব্রডকাস্ট</a>
+    <a href="/requests" {% if request.path.startswith('/requests') %}class="active"{% endif %}>রিকোয়েস্ট{% if pending_req_count > 0 %} <span class="nav-badge">{{ pending_req_count }}</span>{% endif %}</a>
+    <a href="/users" {% if request.path.startswith('/users') %}class="active"{% endif %}>ইউজার</a>
+    <a href="/stats" {% if request.path.startswith('/stats') %}class="active"{% endif %}>📊 স্ট্যাটস</a>
+    <a href="/channels" {% if request.path.startswith('/channels') %}class="active"{% endif %}>চ্যানেল</a>
+    <a href="/bot-messages" {% if request.path.startswith('/bot-messages') %}class="active"{% endif %}>মেসেজ</a>
+    <a href="/settings" {% if request.path.startswith('/settings') %}class="active"{% endif %}>সেটিংস</a>
+  </nav>
+</header>
+{% endif %}
+
+<main class="container">
+  {% if flash %}
+  <div class="flash flash-{{ flash.kind }}">{{ flash.msg }}</div>
+  {% endif %}
+  {% block content %}{% endblock %}
+</main>
+
+<footer class="footer">
+  <span>বট অনলাইন · মুভি বট অ্যাডমিন প্যানেল</span>
+</footer>
+</body>
+</html>

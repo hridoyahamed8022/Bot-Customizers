@@ -1,0 +1,125 @@
+{% extends "base.html" %}
+{% block title %}স্ট্যাটিস্টিক্স{% endblock %}
+{% block content %}
+<h1>📊 স্ট্যাটিস্টিক্স</h1>
+
+{% if flash %}
+<div class="flash flash-{{ flash.kind }}">{{ flash.msg }}</div>
+{% endif %}
+
+<!-- ── মূল পরিসংখ্যান (ক্লিকযোগ্য) ── -->
+<section class="cards" style="margin-bottom:1.8rem">
+  <a href="/movies" class="card card-link" title="মুভি লিস্ট দেখুন">
+    <div class="num">{{ total_movies }}</div>
+    <div class="lbl">🎬 মোট মুভি</div>
+  </a>
+  <div class="card" title="মোট মুভি ডেলিভারি">
+    <div class="num">{{ total_hits }}</div>
+    <div class="lbl">📥 মোট ডেলিভারি</div>
+  </div>
+  <a href="/users" class="card card-link" title="সব ইউজার দেখুন">
+    <div class="num">{{ total_users }}</div>
+    <div class="lbl">👥 মোট ইউজার</div>
+  </a>
+  <a href="/users?filter=verified" class="card card-link" title="ভেরিফাইড ইউজার দেখুন">
+    <div class="num" style="color:var(--accent-ok)">{{ verified_count }}</div>
+    <div class="lbl">✅ ভেরিফাইড</div>
+  </a>
+  <a href="/users?filter=blocked" class="card card-link" title="ব্লকড ইউজার দেখুন">
+    <div class="num" style="color:var(--accent-warn)">{{ blocked_count }}</div>
+    <div class="lbl">🚫 ব্লকড</div>
+  </a>
+  <a href="/settings#bans" class="card card-link" title="ব্যান তালিকা দেখুন">
+    <div class="num" style="color:var(--accent-err)">{{ banned_count }}</div>
+    <div class="lbl">⛔ ব্যান</div>
+  </a>
+</section>
+
+<!-- ── নতুন ইউজার ও ডেলিভারি ── -->
+<section class="grid-3" style="margin-bottom:1.8rem">
+  <div class="stat-card">
+    <div class="stat-title">👤 নতুন ইউজার</div>
+    <div class="stat-row"><span>আজ</span><strong>{{ today_users }}</strong></div>
+    <div class="stat-row"><span>এই সপ্তাহে</span><strong>{{ week_users }}</strong></div>
+    <div class="stat-row"><span>এই মাসে</span><strong>{{ month_users }}</strong></div>
+  </div>
+
+  <div class="stat-card">
+    <div class="stat-title">📥 মুভি ডেলিভারি</div>
+    <div class="stat-row"><span>আজ</span><strong>{{ today_deliveries }}</strong></div>
+    <div class="stat-row"><span>এই সপ্তাহে</span><strong>{{ week_deliveries }}</strong></div>
+    <div class="stat-row"><span>মোট</span><strong>{{ total_hits }}</strong></div>
+  </div>
+
+  <div class="stat-card">
+    <div class="stat-title">🎬 রিকোয়েস্ট</div>
+    <a href="/requests?status=pending" class="stat-row stat-link">
+      <span style="color:var(--accent-warn)">⏳ অপেক্ষমাণ</span><strong>{{ pending_req }}</strong>
+    </a>
+    <a href="/requests?status=done" class="stat-row stat-link">
+      <span style="color:var(--accent-ok)">✅ সম্পন্ন</span><strong>{{ done_req }}</strong>
+    </a>
+    <a href="/requests?status=rejected" class="stat-row stat-link">
+      <span style="color:var(--accent-err)">❌ বাতিল</span><strong>{{ rejected_req }}</strong>
+    </a>
+  </div>
+</section>
+
+<!-- ── দুই কলামের গ্রিড ── -->
+<section class="grid-2">
+  <div>
+    <h2 style="margin-bottom:.8rem">🏆 সবচেয়ে বেশি ডাউনলোড হওয়া মুভি</h2>
+    {% if top_movies %}
+    <div class="rank-list">
+      {% for m in top_movies %}
+      <div class="rank-row">
+        <span class="rank-num">{{ loop.index }}</span>
+        <span class="rank-type">{{ m.file_type }}</span>
+        <span class="rank-title">{{ m.title }}</span>
+        <span class="rank-hits">{{ m.hits }} <small>বার</small></span>
+      </div>
+      {% endfor %}
+    </div>
+    {% else %}
+    <p class="muted">এখনো কোনো ডাউনলোড নেই।</p>
+    {% endif %}
+  </div>
+
+  <div>
+    <h2 style="margin-bottom:.8rem">🆕 সম্প্রতি যোগ হওয়া মুভি</h2>
+    {% if recent_movies %}
+    <ul class="movie-list">
+      {% for m in recent_movies %}
+      <li>
+        <span class="badge">{{ m.file_type }}</span>
+        <span class="title">{{ m.title }}</span>
+        <span class="meta">{{ m.added_at | fmtdate }}</span>
+      </li>
+      {% endfor %}
+    </ul>
+    {% else %}
+    <p class="muted">কোনো মুভি নেই।</p>
+    {% endif %}
+  </div>
+</section>
+
+<style>
+.card-link{text-decoration:none;color:inherit;cursor:pointer;transition:transform .12s,border-color .12s,box-shadow .12s}
+.card-link:hover{transform:translateY(-2px);border-color:var(--accent,#a78bfa);box-shadow:0 4px 18px rgba(167,139,250,.18)}
+.grid-3{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:1rem}
+.stat-card{background:var(--bg-card,#1e1e2e);border:1px solid var(--border,#333);border-radius:10px;padding:1rem 1.2rem}
+.stat-title{font-weight:700;font-size:.95rem;margin-bottom:.7rem;color:var(--accent,#a78bfa)}
+.stat-row{display:flex;justify-content:space-between;align-items:center;padding:.28rem 0;border-bottom:1px solid var(--border,#2a2a3a);font-size:.88rem}
+.stat-row:last-child{border-bottom:none}
+.stat-row strong{font-size:1rem;color:#fff}
+.stat-link{text-decoration:none;color:inherit;border-radius:4px;padding-left:.15rem;padding-right:.15rem;transition:background .1s}
+.stat-link:hover{background:rgba(167,139,250,.08)}
+.rank-list{display:flex;flex-direction:column;gap:.3rem}
+.rank-row{display:flex;align-items:center;gap:.5rem;padding:.38rem .6rem;background:var(--bg-card,#1e1e2e);border-radius:6px;border:1px solid var(--border,#2a2a3a);font-size:.84rem}
+.rank-num{min-width:1.4rem;text-align:center;font-weight:700;color:var(--accent,#a78bfa)}
+.rank-type{font-size:.7rem;padding:.1rem .35rem;border-radius:4px;background:#2a2a3a;color:#aaa;white-space:nowrap}
+.rank-title{flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.rank-hits{font-weight:700;color:var(--accent-ok,#4ade80);white-space:nowrap}
+.rank-hits small{font-weight:400;color:var(--muted,#888);font-size:.74rem}
+</style>
+{% endblock %}

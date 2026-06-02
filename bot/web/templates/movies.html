@@ -1,0 +1,48 @@
+{% extends "base.html" %}
+{% block title %}মুভি লিস্ট{% endblock %}
+{% block content %}
+<h1>ইনডেক্সড মুভি <span class="muted">({{ total }})</span></h1>
+
+<form method="get" class="search-bar">
+  <input type="text" name="q" placeholder="নাম / ক্যাপশন / ফাইলনেম দিয়ে সার্চ…" value="{{ q }}">
+  <button type="submit" class="btn">সার্চ</button>
+  {% if q %}<a href="/movies" class="btn ghost">ক্লিয়ার</a>{% endif %}
+</form>
+
+{% if movies %}
+<table class="data-table">
+  <thead>
+    <tr><th>#</th><th>টাইপ</th><th>নাম</th><th>সাইজ</th><th>হিট</th><th>যোগ হয়েছে</th><th></th></tr>
+  </thead>
+  <tbody>
+    {% for m in movies %}
+    <tr>
+      <td>{{ m.id }}</td>
+      <td><span class="badge">{{ m.file_type }}</span></td>
+      <td>
+        <strong>{{ m.title }}</strong>
+        {% if m.file_name %}<br><span class="muted">{{ m.file_name }}</span>{% endif %}
+      </td>
+      <td>{{ m.size_bytes | humansize }}</td>
+      <td>{{ m.hits }}</td>
+      <td>{{ m.added_at | fmtdate }}</td>
+      <td>
+        <form method="post" action="/movies/delete" onsubmit="return confirm('এই মুভিটি লাইব্রেরি থেকে ডিলিট করবেন?');">
+          <input type="hidden" name="id" value="{{ m.id }}">
+          <button class="btn danger" type="submit">ডিলিট</button>
+        </form>
+      </td>
+    </tr>
+    {% endfor %}
+  </tbody>
+</table>
+
+<div class="pager">
+  {% if page > 0 %}<a class="btn ghost" href="?q={{ q }}&page={{ page - 1 }}">⬅ আগের</a>{% endif %}
+  <span>পৃষ্ঠা {{ page + 1 }} / {{ pages }}</span>
+  {% if page + 1 < pages %}<a class="btn ghost" href="?q={{ q }}&page={{ page + 1 }}">পরবর্তী ➡</a>{% endif %}
+</div>
+{% else %}
+<p class="muted">কোনো মুভি মিলেনি।</p>
+{% endif %}
+{% endblock %}

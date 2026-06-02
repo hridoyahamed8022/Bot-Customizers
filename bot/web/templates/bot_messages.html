@@ -1,0 +1,28 @@
+{% extends "base.html" %}
+{% block title %}বট মেসেজ এডিটর{% endblock %}
+{% block content %}
+<h1>বট মেসেজ এডিটর</h1>
+<p class="muted">এখানে বটের সব স্বয়ংক্রিয় মেসেজ সম্পাদনা করুন। HTML ট্যাগ (<code>&lt;b&gt;</code>, <code>&lt;i&gt;</code>, <code>&lt;code&gt;</code>) ব্যবহার করা যাবে। সংরক্ষণ করার পর পরিবর্তন সঙ্গে সঙ্গে কার্যকর হবে।</p>
+
+{% if flash %}
+<div class="flash flash-{{ flash.kind }}">{{ flash.msg }}</div>
+{% endif %}
+
+{% for msg in messages %}
+<section class="card-block" style="margin-bottom:1.5rem">
+  <h2>{{ msg.label }}</h2>
+  <p class="muted" style="font-size:.85rem">কী: <code>{{ msg.key }}</code></p>
+  <form method="post" action="/bot-messages/save">
+    <input type="hidden" name="key" value="{{ msg.key }}">
+    <textarea name="text" rows="6" style="width:100%;font-family:monospace;font-size:.9rem;padding:.5rem;background:var(--panel-2);border:1px solid var(--border);color:var(--text);border-radius:4px;resize:vertical">{{ msg.value }}</textarea>
+    <div class="actions" style="margin-top:.5rem">
+      <button type="submit" class="btn primary">💾 সংরক্ষণ করুন</button>
+      <form method="post" action="/bot-messages/reset" style="display:inline">
+        <input type="hidden" name="key" value="{{ msg.key }}">
+        <button type="submit" class="btn ghost" onclick="return confirm('ডিফল্টে ফেরাবেন?')">↩ ডিফল্ট</button>
+      </form>
+    </div>
+  </form>
+</section>
+{% endfor %}
+{% endblock %}

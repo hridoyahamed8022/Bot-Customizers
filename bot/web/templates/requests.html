@@ -1,0 +1,118 @@
+{% extends "base.html" %}
+{% block title %}মুভি রিকোয়েস্ট{% endblock %}
+{% block content %}
+<div style="display:flex;align-items:center;gap:1rem;margin-bottom:1rem;">
+  <h1 style="margin:0">মুভি রিকোয়েস্ট</h1>
+  {% if pending_count > 0 %}
+  <span class="badge" style="background:var(--accent);color:#fff;padding:.25rem .6rem;border-radius:999px;font-size:.85rem;">{{ pending_count }} নতুন</span>
+  {% endif %}
+</div>
+
+<div class="search-bar" style="gap:.5rem;flex-wrap:wrap;margin-bottom:1rem;">
+  <form method="get" style="display:flex;gap:.5rem;flex:1">
+    <select name="status" onchange="this.form.submit()" style="min-width:130px">
+      <option value="all" {% if status_filter=='all' %}selected{% endif %}>সব</option>
+      <option value="pending" {% if status_filter=='pending' %}selected{% endif %}>অপেক্ষমাণ</option>
+      <option value="done" {% if status_filter=='done' %}selected{% endif %}>সম্পন্ন</option>
+      <option value="rejected" {% if status_filter=='rejected' %}selected{% endif %}>বাতিল</option>
+    </select>
+  </form>
+</div>
+
+{% if requests %}
+<table class="data-table">
+  <thead>
+    <tr>
+      <th>#</th><th>ইউজার</th><th>মুভির নাম</th><th>নোট</th><th>তারিখ</th><th>স্ট্যাটাস</th><th>অ্যাকশন</th>
+    </tr>
+  </thead>
+  <tbody>
+    {% for r in requests %}
+    <tr>
+      <td><code>{{ r.id }}</code></td>
+      <td>
+        {% if r.first_name %}{{ r.first_name }}{% endif %}
+        {% if r.username %}<br><span class="muted">@{{ r.username }}</span>{% endif %}
+        <br><code style="font-size:.75rem">{{ r.user_id }}</code>
+      </td>
+      <td><strong>{{ r.title }}</strong></td>
+      <td><span class="muted">{{ r.note or '—' }}</span></td>
+      <td><span class="muted">{{ r.created_at | fmtdate }}</span></td>
+      <td>
+        {% if r.status == 'pending' %}
+        <span style="color:var(--accent-warn)">⏳ অপেক্ষমাণ</span>
+        {% elif r.status == 'done' %}
+        <span style="color:var(--accent-ok)">✅ সম্পন্ন</span>
+        {% else %}
+        <span style="color:var(--accent-err)">❌ বাতিল</span>
+        {% endif %}
+      </td>
+      <td style="display:flex;gap:.4rem;flex-wrap:wrap">
+        {% if r.status != 'done' %}
+        <form method="post" action="/requests/resolve">
+          <input type="hidden" name="id" value="{{ r.id }}">
+          <input type="hidden" name="status" value="done">
+          <button class="btn primary" type="submit" title="আপলোড সম্পন্ন — ইউজারকে জানাও" style="font-size:.8rem;padding:.25rem .5rem">✅</button>
+        </form>
+        {% endif %}
+        {% if r.status != 'rejected' %}
+        <button class="btn ghost" type="button" title="বানান ভুল — সঠিক নাম পাঠাও"
+          onclick="openRejectModal({{ r.id }}, '{{ r.title | replace("'", "\\'") }}')"
+          style="font-size:.8rem;padding:.25rem .5rem">❌</button>
+        {% endif %}
+        <form method="post" action="/requests/delete" onsubmit="return confirm('ডিলিট করবেন? ইউজারকে জানানো হবে।');">
+          <input type="hidden" name="id" value="{{ r.id }}">
+          <button class="btn danger" type="submit" title="মুভি নেই — ইউজারকে জানাও" style="font-size:.8rem;padding:.25rem .5rem">🗑</button>
+        </form>
+      </td>
+    </tr>
+    {% endfor %}
+  </tbody>
+</table>
+{% else %}
+<div class="hint">কোনো রিকোয়েস্ট নেই।</div>
+{% endif %}
+
+{% if flash %}
+<div class="flash flash-{{ flash.kind }}" style="margin-top:1rem">{{ flash.msg }}</div>
+{% endif %}
+
+<!-- Reject Modal -->
+<div id="rejectModal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:9999;align-items:center;justify-content:center;">
+  <div style="background:var(--bg-card,#1e1e2e);border:1px solid var(--border,#333);border-radius:12px;padding:1.5rem;max-width:420px;width:90%;box-shadow:0 8px 32px rgba(0,0,0,.5);">
+    <h3 style="margin:0 0 .5rem">❌ বানান ভুল</h3>
+    <p style="color:var(--muted,#aaa);font-size:.9rem;margin:0 0 1rem">
+      রিকোয়েস্ট: <strong id="rejectTitle"></strong><br>
+      ইউজারকে মুভির সঠিক নামটি জানান যাতে সে সার্চ করতে পারে।
+    </p>
+    <form method="post" action="/requests/resolve" id="rejectForm">
+      <input type="hidden" name="id" id="rejectId">
+      <input type="hidden" name="status" value="rejected">
+      <label style="display:block;font-size:.85rem;margin-bottom:.4rem;color:var(--muted,#aaa)">মুভির সঠিক নাম (ইংরেজিতে):</label>
+      <input type="text" name="correct_name" id="correctNameInput" placeholder="যেমন: Interstellar, KGF Chapter 2"
+        style="width:100%;padding:.5rem .75rem;border-radius:8px;border:1px solid var(--border,#444);background:var(--bg,#13131f);color:inherit;font-size:.95rem;box-sizing:border-box;margin-bottom:1rem;">
+      <div style="display:flex;gap:.5rem;justify-content:flex-end;">
+        <button type="button" onclick="closeRejectModal()" class="btn ghost" style="font-size:.85rem">বাতিল</button>
+        <button type="submit" class="btn primary" style="font-size:.85rem">📨 পাঠাও</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<script>
+function openRejectModal(id, title) {
+  document.getElementById('rejectId').value = id;
+  document.getElementById('rejectTitle').textContent = title;
+  document.getElementById('correctNameInput').value = '';
+  var modal = document.getElementById('rejectModal');
+  modal.style.display = 'flex';
+  setTimeout(function(){ document.getElementById('correctNameInput').focus(); }, 100);
+}
+function closeRejectModal() {
+  document.getElementById('rejectModal').style.display = 'none';
+}
+document.getElementById('rejectModal').addEventListener('click', function(e) {
+  if (e.target === this) closeRejectModal();
+});
+</script>
+{% endblock %}

@@ -1,0 +1,68 @@
+{% extends "base.html" %}
+{% block title %}ড্যাশবোর্ড{% endblock %}
+{% block content %}
+<h1>ড্যাশবোর্ড</h1>
+
+<section class="cards">
+  <div class="card"><div class="num">{{ stats.movies }}</div><div class="lbl">ইনডেক্সড মুভি</div></div>
+  <div class="card"><div class="num">{{ stats.users }}</div><div class="lbl">বট ইউজার</div></div>
+  <div class="card"><div class="num">{{ stats.hits }}</div><div class="lbl">মোট ডেলিভারি</div></div>
+  <div class="card"><div class="num">{{ stats.bans }}</div><div class="lbl">ব্যান করা</div></div>
+  <div class="card"><div class="num">{{ stats.fj_count }}</div><div class="lbl">ভেরিফাই চ্যানেল</div></div>
+  <a href="/requests" class="card" style="text-decoration:none;{% if stats.pending_requests > 0 %}border-color:var(--accent);{% endif %}">
+    <div class="num" style="{% if stats.pending_requests > 0 %}color:var(--accent){% endif %}">{{ stats.pending_requests }}</div>
+    <div class="lbl">🎬 নতুন রিকোয়েস্ট</div>
+  </a>
+</section>
+
+{% if maintenance_mode %}
+<div class="hint warn" style="display:flex;align-items:center;gap:.5rem">
+  🔧 <strong>মেইনটেন্যান্স মোড চালু</strong> — বট ইউজারদের জন্য বন্ধ আছে।
+  <form method="post" action="/maintenance/toggle" style="margin:0">
+    <button type="submit" class="btn ghost" style="padding:.2rem .6rem">বন্ধ করুন</button>
+  </form>
+</div>
+{% endif %}
+
+{% if request_group_id %}
+<p class="hint">পোস্ট ডিফল্টভাবে আপনার <strong>রিকোয়েস্ট গ্রুপে</strong> <code>{{ request_group_id }}</code> যাবে।</p>
+{% else %}
+<p class="hint warn">কোনো রিকোয়েস্ট গ্রুপ সেট নেই — Replit Secrets-এ <code>REQUEST_GROUP_ID</code> সেট করুন।</p>
+{% endif %}
+
+<section class="grid-2">
+  <div>
+    <h2>সাম্প্রতিক যোগ হওয়া মিডিয়া</h2>
+    {% if recent_movies %}
+    <ul class="movie-list">
+      {% for m in recent_movies %}
+      <li>
+        <span class="badge">{{ m.file_type }}</span>
+        <span class="title">{{ m.title }}</span>
+        <span class="meta">{{ m.size_bytes | humansize }} · {{ m.added_at | fmtdate }}</span>
+      </li>
+      {% endfor %}
+    </ul>
+    {% else %}
+    <p class="muted">এখনো কোনো মিডিয়া ইনডেক্স হয়নি।</p>
+    {% endif %}
+  </div>
+
+  <div>
+    <h2>সাম্প্রতিক কার্যকলাপ</h2>
+    {% if recent_logs %}
+    <ul class="log-list">
+      {% for l in recent_logs %}
+      <li>
+        <span class="kind">{{ l.kind }}</span>
+        <span class="ts">{{ l.created_at | fmtdate }}</span>
+        <span class="payload">{{ l.payload }}</span>
+      </li>
+      {% endfor %}
+    </ul>
+    {% else %}
+    <p class="muted">এখনো কোনো কার্যকলাপ নেই।</p>
+    {% endif %}
+  </div>
+</section>
+{% endblock %}

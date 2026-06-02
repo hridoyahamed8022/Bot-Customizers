@@ -1,0 +1,243 @@
+{% extends "base.html" %}
+{% block title %}সেটিংস{% endblock %}
+{% block content %}
+<h1>সেটিংস</h1>
+
+{% if flash %}
+<div class="flash flash-{{ flash.kind }}">{{ flash.msg }}</div>
+{% endif %}
+
+<!-- ══ মেইনটেন্যান্স মোড ══ -->
+<section class="card-block" id="maintenance">
+  <h2>🔧 মেইনটেন্যান্স মোড</h2>
+
+  {% if maintenance_on %}
+  <!-- ── চালু অবস্থা ── -->
+  <div class="maint-active-box">
+    <div class="maint-icon">🔧</div>
+    <div class="maint-status-label">রক্ষণাবেক্ষণ চলছে</div>
+
+    {% if maintenance_until and maintenance_until > 0 %}
+    <div class="maint-countdown-wrap">
+      <div class="maint-countdown-label">বাকি সময়</div>
+      <div class="maint-countdown" id="maint-countdown">—</div>
+      <div class="maint-progress-track"><div class="maint-progress-bar" id="maint-bar"></div></div>
+    </div>
+    {% else %}
+    <div class="maint-countdown-wrap">
+      <div class="maint-countdown" style="font-size:1rem;color:var(--accent-warn)">অনির্দিষ্ট সময়</div>
+    </div>
+    {% endif %}
+
+    <form method="post" action="/maintenance/toggle" style="margin-top:1rem">
+      <input type="hidden" name="action" value="off">
+      <button type="submit" class="btn primary">✅ মেইনটেন্যান্স মোড বন্ধ করুন</button>
+    </form>
+  </div>
+
+  {% else %}
+  <!-- ── বন্ধ অবস্থা ── -->
+  <p class="muted">চালু থাকলে অ্যাডমিন ছাড়া সব ইউজার বটে মেইনটেন্যান্স মেসেজ দেখবে।</p>
+
+  <button class="btn ghost" id="maint-open-btn" onclick="document.getElementById('maint-picker').style.display='block';this.style.display='none'">
+    🔧 মেইনটেন্যান্স মোড চালু করুন
+  </button>
+
+  <div id="maint-picker" style="display:none;margin-top:1rem">
+    <form method="post" action="/maintenance/toggle">
+      <input type="hidden" name="action" value="on">
+
+      <div class="maint-duration-label">⏱ কতক্ষণের জন্য?</div>
+      <div class="maint-duration-grid">
+        <label class="dur-opt"><input type="radio" name="duration_mins" value="5"> <span>৫ মিনিট</span></label>
+        <label class="dur-opt"><input type="radio" name="duration_mins" value="10"> <span>১০ মিনিট</span></label>
+        <label class="dur-opt"><input type="radio" name="duration_mins" value="30" checked> <span>৩০ মিনিট</span></label>
+        <label class="dur-opt"><input type="radio" name="duration_mins" value="40"> <span>৪০ মিনিট</span></label>
+        <label class="dur-opt"><input type="radio" name="duration_mins" value="50"> <span>৫০ মিনিট</span></label>
+        <label class="dur-opt"><input type="radio" name="duration_mins" value="60"> <span>১ ঘণ্টা</span></label>
+        <label class="dur-opt"><input type="radio" name="duration_mins" value="120"> <span>২ ঘণ্টা</span></label>
+      </div>
+
+      <div class="maint-picker-actions">
+        <button type="submit" class="btn danger">🔧 চালু করুন ও সবাইকে জানান</button>
+        <button type="button" class="btn ghost" onclick="document.getElementById('maint-picker').style.display='none';document.getElementById('maint-open-btn').style.display='inline-block'">বাতিল</button>
+      </div>
+    </form>
+  </div>
+  {% endif %}
+</section>
+
+<!-- ══ ডিসকাশন গ্রুপ লিংক ══ -->
+<section class="card-block">
+  <h2>💬 ডিসকাশন গ্রুপ লিংক</h2>
+  <p class="muted">মেইনটেন্যান্স মেসেজে এবং সার্চ বাটনে এই লিংকটি দেখানো হবে।</p>
+  <form method="post" action="/settings/discussion" class="form" style="flex-direction:row;gap:.6rem;align-items:center">
+    <input type="url" name="url" value="{{ discussion_url or '' }}" placeholder="https://t.me/your_group" style="flex:1;max-width:420px">
+    <button type="submit" class="btn primary">💾 সেভ করুন</button>
+    {% if discussion_url %}
+    <a href="{{ discussion_url }}" target="_blank" class="btn ghost">🔗 দেখুন</a>
+    {% endif %}
+  </form>
+</section>
+
+<!-- ══ সিস্টেম তথ্য ══ -->
+<section class="card-block">
+  <h2>সিস্টেম তথ্য</h2>
+  <ul class="kv">
+    <li><span>রিকোয়েস্ট গ্রুপ আইডি</span><code>{{ request_group_id or '—' }}</code></li>
+    <li><span>ব্যাকআপ চ্যানেল আইডি</span><code>{{ backup_channel_id or 'সেট নেই' }}</code></li>
+    <li><span>অ্যাডমিন টেলিগ্রাম আইডি</span><code>{{ admin_ids | join(', ') or '—' }}</code></li>
+    <li><span>ভেরিফায়েড ইউজার</span><code>{{ verified_count }}</code></li>
+    <li><span>নিবন্ধিত চ্যানেল</span><code>{{ channel_count }}</code></li>
+  </ul>
+  <p class="muted" style="margin-top:.5rem">
+    পরিবর্তন করতে Replit Secrets আপডেট করুন
+    (<code>BOT_TOKEN</code>, <code>ADMIN_IDS</code>, <code>REQUEST_GROUP_ID</code>,
+    <code>BACKUP_CHANNEL_ID</code>, <code>ADMIN_USERNAME</code>, <code>ADMIN_PASSWORD</code>)
+    — তারপর অ্যাপ রিস্টার্ট করুন।
+  </p>
+</section>
+
+<!-- ══ ভেরিফিকেশন চ্যানেল ══ -->
+<section class="card-block">
+  <h2>ভেরিফিকেশন চ্যানেল (২টি)</h2>
+  <p class="muted">প্রথমবার সার্চ করার আগে ইউজারকে এই চ্যানেলগুলোতে জয়েন করতে হবে।</p>
+
+  {% if force_join %}
+  <table class="data-table">
+    <thead><tr><th>চ্যাট আইডি</th><th>নাম</th><th>ইউজারনেম</th><th>ইনভাইট লিংক</th><th></th></tr></thead>
+    <tbody>
+      {% for c in force_join %}
+      <tr>
+        <td><code>{{ c.chat_id }}</code></td>
+        <td>{{ c.title or '—' }}</td>
+        <td>{{ c.username or '—' }}</td>
+        <td>{% if c.invite_url %}<a href="{{ c.invite_url }}" target="_blank">{{ c.invite_url[:40] }}…</a>{% else %}—{% endif %}</td>
+        <td>
+          <form method="post" action="/settings/fj/del" onsubmit="return confirm('সরাবেন?');">
+            <input type="hidden" name="chat_id" value="{{ c.chat_id }}">
+            <button class="btn danger" type="submit">সরান</button>
+          </form>
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  {% else %}
+  <div class="hint warn">কোনো ভেরিফিকেশন চ্যানেল নেই। না থাকলে ভেরিফিকেশন অটো-পাশ হয়।</div>
+  {% endif %}
+
+  <form method="post" action="/settings/fj/add" class="form inline" style="margin-top:.75rem">
+    <input type="text" name="chat_id" placeholder="চ্যাট আইডি (-100…)" required>
+    <input type="text" name="title" placeholder="নাম (হিন্দি ডাবিং / বাংলা ডাবিং)">
+    <input type="text" name="username" placeholder="@username (ঐচ্ছিক)">
+    <input type="text" name="invite_url" placeholder="https://t.me/+invite (ঐচ্ছিক)">
+    <button class="btn primary" type="submit">যোগ করুন</button>
+  </form>
+
+  <form method="post" action="/settings/verify/reset" onsubmit="return confirm('নিশ্চিত? সব ইউজারের ভেরিফিকেশন রিসেট হবে।');" style="margin-top:.75rem">
+    <button type="submit" class="btn ghost">🔄 সব ইউজারের ভেরিফিকেশন রিসেট করুন</button>
+  </form>
+</section>
+
+<!-- ══ ব্যান লিস্ট ══ -->
+<section class="card-block" id="bans">
+  <h2>⛔ ব্যান লিস্ট</h2>
+  {% if bans %}
+  <table class="data-table">
+    <thead><tr><th>ইউজার আইডি</th><th>কারণ</th><th>ব্যান করা হয়েছে</th><th></th></tr></thead>
+    <tbody>
+      {% for b in bans %}
+      <tr>
+        <td><code>{{ b.user_id }}</code></td>
+        <td>{{ b.reason or '—' }}</td>
+        <td>{{ b.at | fmtdate }}</td>
+        <td>
+          <form method="post" action="/settings/ban">
+            <input type="hidden" name="action" value="unban">
+            <input type="hidden" name="user_id" value="{{ b.user_id }}">
+            <button class="btn ghost" type="submit">আনব্যান</button>
+          </form>
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  {% else %}
+  <p class="muted">কোনো ব্যান করা ইউজার নেই।</p>
+  {% endif %}
+  <form method="post" action="/settings/ban" class="form inline" style="margin-top:.75rem">
+    <input type="hidden" name="action" value="ban">
+    <input type="text" name="user_id" placeholder="ইউজার আইডি" required>
+    <input type="text" name="reason" placeholder="কারণ (ঐচ্ছিক)">
+    <button class="btn danger" type="submit">ব্যান</button>
+  </form>
+</section>
+
+<!-- ══ Styles + Countdown JS ══ -->
+<style>
+/* ─── Maintenance Active Box ─── */
+.maint-active-box{
+  background:linear-gradient(135deg,rgba(251,191,36,.06),rgba(239,68,68,.06));
+  border:1.5px solid var(--accent-warn,#f59e0b);
+  border-radius:14px;padding:1.5rem 1.8rem;text-align:center;
+  max-width:420px
+}
+.maint-icon{font-size:2.4rem;line-height:1;margin-bottom:.4rem;
+  animation:spin-slow 4s linear infinite}
+@keyframes spin-slow{0%{transform:rotate(0deg)}100%{transform:rotate(360deg)}}
+.maint-status-label{font-size:1.15rem;font-weight:700;color:var(--accent-warn,#f59e0b);margin-bottom:1rem}
+.maint-countdown-wrap{margin:.4rem 0 .8rem}
+.maint-countdown-label{font-size:.78rem;color:var(--muted,#888);margin-bottom:.2rem;letter-spacing:.04em;text-transform:uppercase}
+.maint-countdown{font-size:2rem;font-weight:800;letter-spacing:.02em;color:#fff;font-variant-numeric:tabular-nums}
+.maint-progress-track{height:5px;background:rgba(255,255,255,.08);border-radius:99px;margin-top:.6rem;overflow:hidden}
+.maint-progress-bar{height:100%;background:var(--accent-warn,#f59e0b);border-radius:99px;transition:width .9s linear}
+
+/* ─── Duration Picker ─── */
+.maint-duration-label{font-weight:600;font-size:.9rem;margin-bottom:.7rem;color:var(--muted,#aaa)}
+.maint-duration-grid{display:flex;flex-wrap:wrap;gap:.5rem;margin-bottom:1.1rem}
+.dur-opt{display:flex;align-items:center;gap:0}
+.dur-opt input[type=radio]{display:none}
+.dur-opt span{
+  display:inline-block;padding:.42rem .9rem;border-radius:8px;
+  border:1.5px solid var(--border,#333);
+  background:var(--bg-card,#1e1e2e);
+  color:var(--muted,#aaa);font-size:.88rem;cursor:pointer;
+  transition:border-color .12s,background .12s,color .12s
+}
+.dur-opt input:checked + span{
+  border-color:var(--accent-warn,#f59e0b);
+  background:rgba(245,158,11,.12);
+  color:var(--accent-warn,#f59e0b);font-weight:700
+}
+.dur-opt span:hover{border-color:var(--accent-warn,#f59e0b);color:#fff}
+.maint-picker-actions{display:flex;gap:.6rem;flex-wrap:wrap}
+</style>
+
+{% if maintenance_on and maintenance_until and maintenance_until > 0 %}
+<script>
+(function(){
+  const until = {{ maintenance_until | int }} * 1000;
+  const total = until - Date.now();
+  const bar = document.getElementById('maint-bar');
+  const cd = document.getElementById('maint-countdown');
+  function pad(n){return String(n).padStart(2,'0')}
+  function tick(){
+    const rem = Math.max(0, until - Date.now());
+    const h = Math.floor(rem/3600000);
+    const m = Math.floor((rem%3600000)/60000);
+    const s = Math.floor((rem%60000)/1000);
+    if(h>0) cd.textContent = h+'ঘ '+pad(m)+'মি '+pad(s)+'সে';
+    else if(m>0) cd.textContent = m+'মি '+pad(s)+'সে';
+    else cd.textContent = s+'সে';
+    const pct = total > 0 ? Math.max(0, rem/total*100) : 0;
+    if(bar) bar.style.width = pct+'%';
+    if(rem <= 0){ cd.textContent = 'শেষ'; clearInterval(timer); location.reload(); }
+  }
+  tick();
+  const timer = setInterval(tick, 1000);
+})();
+</script>
+{% endif %}
+
+{% endblock %}

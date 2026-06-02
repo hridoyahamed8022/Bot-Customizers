@@ -1,0 +1,254 @@
+{% extends "base.html" %}
+{% block title %}ইউজার লিস্ট{% endblock %}
+{% block content %}
+<h1>ইউজার লিস্ট</h1>
+<p class="muted">
+  {% if filter == "verified" %}
+  ✅ ভেরিফাইড ইউজার — মোট <strong>{{ total }}</strong> জন।
+  <a href="/users" class="btn ghost" style="padding:.25rem .65rem;font-size:.8rem;margin-left:.4rem">✕ সব দেখুন</a>
+  {% elif filter == "blocked" %}
+  🚫 ব্লকড ইউজার — মোট <strong>{{ total }}</strong> জন।
+  <a href="/users" class="btn ghost" style="padding:.25rem .65rem;font-size:.8rem;margin-left:.4rem">✕ সব দেখুন</a>
+  {% else %}
+  মোট <strong>{{ total }}</strong> জন ইউজার। নাম, ইউজারনেম বা আইডি দিয়ে খুঁজুন।
+  {% endif %}
+</p>
+
+{% if flash %}
+<div class="flash flash-{{ flash.kind }}">{{ flash.msg }}</div>
+{% endif %}
+
+<form method="get" action="/users" class="form" style="flex-direction:row;gap:.5rem;align-items:center;margin-bottom:1.2rem">
+  <input type="text" name="q" value="{{ q }}" placeholder="নাম / @username / user_id" style="flex:1;max-width:340px">
+  <button type="submit" class="btn primary" style="padding:.45rem 1rem">🔍 খুঁজুন</button>
+  {% if q %}<a href="/users" class="btn ghost" style="padding:.45rem .8rem">✕ ক্লিয়ার</a>{% endif %}
+</form>
+
+{% if users %}
+<div style="overflow-x:auto">
+<table class="table">
+  <thead>
+    <tr>
+      <th>#</th>
+      <th>নাম</th>
+      <th>ইউজারনেম</th>
+      <th>User ID</th>
+      <th>স্ট্যাটাস</th>
+      <th>শেষ সক্রিয়</th>
+      <th>অ্যাকশন</th>
+    </tr>
+  </thead>
+  <tbody>
+  {% for u in users %}
+    <tr>
+      <td class="muted" style="font-size:.8rem">{{ loop.index + page * 30 }}</td>
+      <td>
+        <strong>{{ (u.first_name or '') }}{% if u.last_name %} {{ u.last_name }}{% endif %}</strong>
+        {% if not u.first_name and not u.last_name %}<span class="muted">—</span>{% endif %}
+      </td>
+      <td>
+        {% if u.username %}
+          <a href="https://t.me/{{ u.username }}" target="_blank" rel="noopener">@{{ u.username }}</a>
+        {% else %}<span class="muted">—</span>{% endif %}
+      </td>
+      <td><code>{{ u.user_id }}</code></td>
+      <td>
+        {% if u.is_banned %}
+          <span class="badge danger">⛔ ব্যান</span>
+          {% if u.ban_expires %}
+            <br><span class="muted" style="font-size:.75rem">{{ u.ban_expires | fmtdate }}</span>
+          {% else %}
+            <br><span class="muted" style="font-size:.75rem">স্থায়ী</span>
+          {% endif %}
+        {% elif u.is_blocked %}<span class="badge warn">ব্লকড</span>
+        {% elif u.verified %}<span class="badge ok">✔ ভেরিফাইড</span>
+        {% else %}<span class="muted">সাধারণ</span>{% endif %}
+      </td>
+      <td class="muted" style="font-size:.82rem;white-space:nowrap">{{ u.last_seen | fmtdate }}</td>
+      <td style="white-space:nowrap;display:flex;gap:.3rem;flex-wrap:wrap">
+        <button class="btn ghost" style="padding:.25rem .55rem;font-size:.8rem"
+          onclick="openDm({{ u.user_id }}, '{{ ((u.first_name or '') ~ (' ' ~ u.last_name if u.last_name else '')) | replace("'", "\\'") }}')">
+          ✉️ DM
+        </button>
+        {% if u.is_banned %}
+          <form method="post" action="/users/ban" style="margin:0">
+            <input type="hidden" name="user_id" value="{{ u.user_id }}">
+            <input type="hidden" name="action" value="unban">
+            <button type="submit" class="btn ok" style="padding:.25rem .55rem;font-size:.8rem">✅ আনব্যান</button>
+          </form>
+        {% else %}
+          <button class="btn danger" style="padding:.25rem .55rem;font-size:.8rem"
+            onclick="openBan({{ u.user_id }}, '{{ ((u.first_name or '') ~ (' ' ~ u.last_name if u.last_name else '')) | replace("'", "\\'") }}')">
+            ⛔ ব্যান
+          </button>
+        {% endif %}
+      </td>
+    </tr>
+  {% endfor %}
+  </tbody>
+</table>
+</div>
+
+{% if pages > 1 %}
+<div style="display:flex;gap:.4rem;margin-top:1rem;flex-wrap:wrap">
+  {% if page > 0 %}
+    <a href="/users?q={{ q }}&page={{ page - 1 }}" class="btn ghost">⬅ আগের</a>
+  {% endif %}
+  <span class="btn ghost" style="cursor:default">{{ page + 1 }} / {{ pages }}</span>
+  {% if page < pages - 1 %}
+    <a href="/users?q={{ q }}&page={{ page + 1 }}" class="btn ghost">পরবর্তী ➡</a>
+  {% endif %}
+</div>
+{% endif %}
+
+{% else %}
+<p class="muted">কোনো ইউজার পাওয়া যায়নি।</p>
+{% endif %}
+
+<!-- ───── DM Modal (with image + buttons) ───── -->
+<div id="dmModal" class="modal-overlay" style="display:none">
+  <div class="modal-box" style="max-width:500px;width:95vw">
+    <h3 style="margin:0 0 .3rem">✉️ মেসেজ পাঠান</h3>
+    <p id="dmTarget" class="muted" style="margin:0 0 .8rem;font-size:.9rem"></p>
+    <form method="post" action="/users/send-dm" enctype="multipart/form-data" id="dmForm">
+      <input type="hidden" name="user_id" id="dmUserId">
+
+      <label style="display:block;margin-bottom:.7rem">
+        <span style="font-size:.82rem;font-weight:600;display:block;margin-bottom:.3rem">মেসেজ টেক্সট (HTML সাপোর্টেড)</span>
+        <textarea name="text" id="dmText" rows="4"
+          placeholder="মেসেজ লিখুন… যেমন: <b>নতুন মুভি!</b>"
+          style="width:100%;box-sizing:border-box;resize:vertical"></textarea>
+      </label>
+
+      <label style="display:block;margin-bottom:.7rem">
+        <span style="font-size:.82rem;font-weight:600;display:block;margin-bottom:.3rem">📷 ছবি সংযুক্ত করুন (ঐচ্ছিক)</span>
+        <input type="file" name="photo" accept="image/*" style="width:100%;box-sizing:border-box">
+        <span class="muted" style="font-size:.78rem">ছবি থাকলে টেক্সট ক্যাপশন হিসেবে যাবে।</span>
+      </label>
+
+      <div style="margin-bottom:.7rem">
+        <span style="font-size:.82rem;font-weight:600;display:block;margin-bottom:.3rem">🔗 ইনলাইন বাটন (ঐচ্ছিক)</span>
+        <div id="dmButtonRows" style="margin-bottom:.4rem"></div>
+        <button type="button" onclick="addDmBtn()" class="btn ghost" style="font-size:.8rem;padding:.25rem .6rem">➕ বাটন যোগ করুন</button>
+        <textarea name="buttons" id="dmButtonsHidden" style="display:none"></textarea>
+      </div>
+
+      <div style="display:flex;gap:.5rem;justify-content:flex-end">
+        <button type="button" onclick="closeModal('dmModal')" class="btn ghost">বাতিল</button>
+        <button type="submit" class="btn primary" onclick="serializeDmButtons()">📤 পাঠান</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<!-- ───── Ban Modal ───── -->
+<div id="banModal" class="modal-overlay" style="display:none">
+  <div class="modal-box">
+    <h3 style="margin:0 0 .3rem">⛔ ইউজার ব্যান করুন</h3>
+    <p id="banTarget" class="muted" style="margin:0 0 1rem;font-size:.9rem"></p>
+    <form method="post" action="/users/ban">
+      <input type="hidden" name="user_id" id="banUserId">
+      <input type="hidden" name="action" value="ban">
+
+      <label style="display:block;margin-bottom:.8rem">
+        <span style="font-size:.88rem;font-weight:600;display:block;margin-bottom:.4rem">সময়কাল নির্বাচন করুন</span>
+        <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:.4rem;margin-bottom:.5rem">
+          <button type="button" class="btn ghost dur-btn" data-min="30">৩০ মি.</button>
+          <button type="button" class="btn ghost dur-btn" data-min="60">১ ঘন্টা</button>
+          <button type="button" class="btn ghost dur-btn" data-min="120">২ ঘন্টা</button>
+          <button type="button" class="btn ghost dur-btn" data-min="360">৬ ঘন্টা</button>
+          <button type="button" class="btn ghost dur-btn" data-min="720">১২ ঘন্টা</button>
+          <button type="button" class="btn ghost dur-btn" data-min="1440">১ দিন</button>
+          <button type="button" class="btn ghost dur-btn" data-min="4320">৩ দিন</button>
+          <button type="button" class="btn ghost dur-btn" data-min="10080">৭ দিন</button>
+          <button type="button" class="btn danger dur-btn" data-min="0">স্থায়ী</button>
+        </div>
+        <input type="hidden" name="duration" id="banDuration" value="60">
+        <div id="durLabel" style="font-size:.85rem;color:#facc15;text-align:center;margin-top:.3rem">নির্বাচিত: ১ ঘন্টা</div>
+      </label>
+
+      <label style="display:block;margin-bottom:.8rem">
+        <span style="font-size:.88rem;font-weight:600;display:block;margin-bottom:.3rem">কারণ (ঐচ্ছিক)</span>
+        <input type="text" name="reason" placeholder="যেমন: স্প্যাম, অপব্যবহার…" style="width:100%;box-sizing:border-box">
+      </label>
+
+      <div style="display:flex;gap:.5rem;justify-content:flex-end">
+        <button type="button" onclick="closeModal('banModal')" class="btn ghost">বাতিল</button>
+        <button type="submit" class="btn danger">⛔ ব্যান করুন</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<style>
+.badge{display:inline-block;padding:.15rem .5rem;border-radius:4px;font-size:.78rem;font-weight:600}
+.badge.ok{background:#1a4a2e;color:#4ade80}
+.badge.warn{background:#4a3a00;color:#facc15}
+.badge.danger{background:#4a1a1a;color:#f87171}
+.table th,.table td{padding:.5rem .7rem;border-bottom:1px solid var(--border,#333);vertical-align:middle}
+.table th{font-size:.8rem;text-transform:uppercase;letter-spacing:.04em;color:var(--muted,#888)}
+.btn.ok{background:#1a4a2e;color:#4ade80;border:1px solid #2d7a4a}
+.modal-overlay{position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:999;display:flex;align-items:center;justify-content:center}
+.modal-box{background:var(--bg,#1e1e2e);border:1px solid var(--border,#333);border-radius:10px;padding:1.5rem;width:min(440px,95vw);box-shadow:0 8px 32px rgba(0,0,0,.4)}
+.dur-btn.selected{background:#3b3b5c;border-color:#a78bfa;color:#a78bfa}
+.dm-btn-row{display:flex;gap:.4rem;align-items:center;margin-bottom:.4rem}
+.dm-btn-row input{flex:1;min-width:80px}
+</style>
+
+<script>
+const DUR_LABELS={0:'স্থায়ী ব্যান',30:'৩০ মিনিট',60:'১ ঘন্টা',120:'২ ঘন্টা',360:'৬ ঘন্টা',720:'১২ ঘন্টা',1440:'১ দিন',4320:'৩ দিন',10080:'৭ দিন'};
+let dmBtnCount = 0;
+
+function addDmBtn(text='', url='') {
+  const id = dmBtnCount++;
+  const div = document.createElement('div');
+  div.className = 'dm-btn-row';
+  div.id = 'dmbrow_' + id;
+  div.innerHTML = `
+    <input type="text" placeholder="বাটনের নাম" value="${esc(text)}" class="dmbtext" style="max-width:150px">
+    <input type="text" placeholder="https://..." value="${esc(url)}" class="dmburl">
+    <button type="button" onclick="document.getElementById('dmbrow_${id}').remove()" class="btn danger" style="padding:.2rem .45rem;font-size:.8rem">✕</button>
+  `;
+  document.getElementById('dmButtonRows').appendChild(div);
+}
+
+function serializeDmButtons() {
+  const rows = document.querySelectorAll('#dmButtonRows .dm-btn-row');
+  const lines = [];
+  rows.forEach(row => {
+    const t = row.querySelector('.dmbtext').value.trim();
+    const u = row.querySelector('.dmburl').value.trim();
+    if (t && u) lines.push(t + ' - ' + u);
+  });
+  document.getElementById('dmButtonsHidden').value = lines.join('\n');
+}
+
+function esc(s){ return (s||'').replace(/&/g,'&amp;').replace(/"/g,'&quot;'); }
+
+function openDm(uid, name){
+  document.getElementById('dmUserId').value = uid;
+  document.getElementById('dmTarget').textContent = 'প্রাপক: ' + (name.trim() || 'User') + ' (#' + uid + ')';
+  document.getElementById('dmText').value = '';
+  document.getElementById('dmButtonRows').innerHTML = '';
+  dmBtnCount = 0;
+  showModal('dmModal');
+  setTimeout(() => document.getElementById('dmText').focus(), 60);
+}
+function openBan(uid,name){
+  document.getElementById('banUserId').value=uid;
+  document.getElementById('banTarget').textContent='ইউজার: '+(name.trim()||'User')+' (#'+uid+')';
+  selectDur(60);
+  showModal('banModal');
+}
+function selectDur(min){
+  document.getElementById('banDuration').value=min;
+  document.getElementById('durLabel').textContent='নির্বাচিত: '+(DUR_LABELS[min]||min+' মিনিট');
+  document.querySelectorAll('.dur-btn').forEach(b=>b.classList.toggle('selected',parseInt(b.dataset.min)===min));
+}
+document.querySelectorAll('.dur-btn').forEach(b=>b.addEventListener('click',()=>selectDur(parseInt(b.dataset.min))));
+function showModal(id){document.getElementById(id).style.display='flex';}
+function closeModal(id){document.getElementById(id).style.display='none';}
+document.querySelectorAll('.modal-overlay').forEach(m=>m.addEventListener('click',e=>{if(e.target===m)m.style.display='none';}));
+document.addEventListener('keydown',e=>{if(e.key==='Escape')document.querySelectorAll('.modal-overlay').forEach(m=>m.style.display='none');});
+</script>
+{% endblock %}

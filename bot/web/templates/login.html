@@ -1,0 +1,31 @@
+{% extends "base.html" %}
+{% block title %}লগইন{% endblock %}
+{% block content %}
+<div class="login-card">
+  <h1>🎬 মুভি বট — অ্যাডমিন</h1>
+  <p class="muted">ইউজারনেম ও পাসওয়ার্ড দিয়ে লগইন করুন। একবার লগইন করলে ৭ দিন সক্রিয় থাকবে।</p>
+
+  {% if error %}
+  <div class="flash flash-err">{{ error }}</div>
+  {% endif %}
+
+  <form method="post" action="/login" class="form" autocomplete="off">
+    <label>
+      ইউজারনেম
+      <input type="text" name="username" required autofocus autocomplete="username">
+    </label>
+    <label>
+      পাসওয়ার্ড
+      <input type="password" name="password" required autocomplete="current-password">
+    </label>
+    <div class="actions">
+      <button type="submit" class="btn primary">🔓 লগইন</button>
+    </div>
+  </form>
+
+  <small class="muted" style="margin-top:1rem;">
+    ক্রেডেনশিয়াল Replit Secrets-এ <code>ADMIN_USERNAME</code> ও
+    <code>ADMIN_PASSWORD</code> নামে সংরক্ষিত। পরিবর্তন করতে Secrets ট্যাবে গিয়ে আপডেট করুন।
+  </small>
+</div>
+{% endblock %}
