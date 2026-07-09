@@ -1,45 +1,55 @@
-# [Project name]
+# Moviex Hub — Bengali Movie/Drama Telegram Bot
 
-_Replace the heading above with the project's name, and this line with one sentence describing what this app does for users._
+A Telegram bot (@Moviex_hub_bot) that lets users search for and receive Bengali/Hindi/English movie and drama files, with an admin web panel and an ad-based monetization gate before file delivery.
 
 ## Run & Operate
 
-- `pnpm --filter @workspace/api-server run dev` — run the API server (port 5000)
-- `pnpm run typecheck` — full typecheck across all packages
-- `pnpm run build` — typecheck + build all packages
-- `pnpm --filter @workspace/api-spec run codegen` — regenerate API hooks and Zod schemas from the OpenAPI spec
-- `pnpm --filter @workspace/db run push` — push DB schema changes (dev only)
-- Required env: `DATABASE_URL` — Postgres connection string
+- `bash run_bot.sh` — runs the bot + admin panel (maps `TELEGRAM_BOT_TOKEN` secret → `BOT_TOKEN`, then `python main.py`)
+- Workflow: `artifacts/api-server: API Server` runs the above on port 8080 (proxied to `/`)
+- Required secrets: `TELEGRAM_BOT_TOKEN`, `ADMIN_IDS`, `ADMIN_USERNAME`, `ADMIN_PASSWORD`, `SESSION_SECRET`, `REQUEST_GROUP_ID`
+- DB: SQLite at `data/bot.sqlite3` (aiosqlite, WAL mode)
 
 ## Stack
 
-- pnpm workspaces, Node.js 24, TypeScript 5.9
-- API: Express 5
-- DB: PostgreSQL + Drizzle ORM
-- Validation: Zod (`zod/v4`), `drizzle-zod`
-- API codegen: Orval (from OpenAPI spec)
-- Build: esbuild (CJS bundle)
+- Python 3.11, aiogram 3.x (Telegram bot), aiohttp (admin web panel), aiosqlite
+- aiohttp_jinja2 for admin panel templates (Bengali UI)
+- openai for the in-bot AI FAQ/chat helper
 
 ## Where things live
 
-_Populate as you build — short repo map plus pointers to the source-of-truth file for DB schema, API contracts, theme files, etc._
+- `bot/handlers/` — Telegram command/callback handlers (`start.py`, `search.py`, `callbacks.py`, etc.)
+- `bot/web/routes.py` — all admin panel routes + public `/ad/{token}` countdown page
+- `bot/web/templates/` — Jinja2 templates for admin panel + `ad.html` (public countdown page)
+- `bot/db.py` — SQLite schema + all DB access methods
+- `bot/config.py` — env-based settings, including `public_url` (used to build ad links)
+- `run_bot.sh` — entrypoint used by the workflow
 
 ## Architecture decisions
 
-_Populate as you build — non-obvious choices a reader couldn't infer from the code (3-5 bullets)._
+- **Ad monetization flow**: movie delivery is gated behind a countdown ad page instead of a direct file send.
+  1. User taps a movie button (`m:get:{id}`) → if `ad_enabled` setting is on, bot creates a row in `ad_tokens` (token, movie_id, user_id, 2h expiry) and sends a link to `{public_url}/ad/{token}`.
+  2. `/ad/{token}` (public aiohttp route, no auth) renders a countdown page; after the configured wait, a button opens `https://t.me/{bot_username}?start=get_{token}`.
+  3. Bot's `/start get_{token}` handler validates the token (exists, unused, unexpired, matches user) then delivers the movie and marks the token used.
+  - Configurable via admin panel Settings page: `ad_enabled`, `ad_wait_seconds` (5–300s), `bot_username` — stored as normal `settings` k/v rows.
+- **Admin panel redirects use JS (`window.location.replace`), not HTTP 302** — see gotcha below.
 
 ## Product
 
-_Describe the high-level user-facing capabilities of this app once they exist._
+- Users DM the bot, search movies by (English-only) title, must join force-join channels once, then request a file.
+- If ad monetization is on, users must visit a countdown ad page and wait out a timer before the bot delivers the file via a `/start get_{token}` deep link.
+- Admin web panel (Bengali UI) manages: movie library, broadcasts, movie requests, bot messages, channels, users/bans, stats, force-join channels, maintenance mode, and ad settings.
 
 ## User preferences
 
-_Populate as you build — explicit user instructions worth remembering across sessions._
+- All user-facing bot and admin panel text must stay in Bengali.
+- Movie search must be in the movie titled in English; Bengali-script search queries are rejected in the search flow.
 
 ## Gotchas
 
-_Populate as you build — sharp edges, "always run X before Y" rules._
+- **Replit's proxy breaks classic HTTP 302 admin-login redirects.** The proxy's cookie/host handling means `Set-Cookie` + `raise web.HTTPFound(...)` redirects can drop the session cookie before the next request. Fix: every admin route returns a `200` with a tiny `<script>window.location.replace(...)</script>` body via the `_js_redirect()` helper in `bot/web/routes.py`, and session cookies are set with `SameSite=None; Secure`. Do not reintroduce `raise web.HTTPFound(...)` in this file.
+- `db.get_setting`/`db.set_setting` JSON-encode/decode values automatically — always pass/compare plain Python values (e.g. compare to the string `"1"`, not `'"1"'`).
+- The bot's SQLite file is at `data/bot.sqlite3`; use aiosqlite (WAL mode) for any manual inspection to avoid lock conflicts with the running bot.
 
 ## Pointers
 
-- See the `pnpm-workspace` skill for workspace structure, TypeScript setup, and package details
+- See the `pnpm-workspace` skill for general monorepo conventions (this artifact is a standalone Python service, not a pnpm package).
