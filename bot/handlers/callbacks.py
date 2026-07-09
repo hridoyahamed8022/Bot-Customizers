@@ -13,7 +13,7 @@ from aiogram.utils.keyboard import InlineKeyboardBuilder
 from ..db import db
 from ..config import settings as cfg
 from ..middlewares.maintenance import build_maint_text, build_maint_kb
-from ..utils import esc, schedule_delete, MOVIE_TTL, MSG_TTL
+from ..utils import esc, schedule_delete, movie_delete_countdown, MOVIE_TTL, MSG_TTL
 from ..utils_ouo import shorten_url
 
 router = Router(name="callbacks")
@@ -58,7 +58,7 @@ async def deliver_movie(target, movie_id: int) -> None:
 
     caption = (
         f"🎬 <b>{esc(movie['title'])}</b>\n\n"
-        f"⏳ <i>এই ফাইলটি <b>১০ মিনিট</b> পর মুছে যাবে।\n"
+        f"⏳ <i>এই ফাইলটি <b>{MOVIE_TTL} সেকেন্ড</b> পর মুছে যাবে।\n"
         f"💡 এখনই কোনো বন্ধুকে ফরওয়ার্ড করে রাখুন!\n"
         f"আবার পেতে বটে নাম লিখে সার্চ করুন।</i>"
     )
@@ -66,7 +66,7 @@ async def deliver_movie(target, movie_id: int) -> None:
         caption = (
             f"🎬 <b>{esc(movie['title'])}</b>\n\n"
             f"{esc(movie['caption'])}\n\n"
-            f"⏳ <i>ফাইলটি <b>১০ মিনিট</b> পর মুছে যাবে — বন্ধুকে ফরওয়ার্ড করুন!</i>"
+            f"⏳ <i>ফাইলটি <b>{MOVIE_TTL} সেকেন্ড</b> পর মুছে যাবে — বন্ধুকে ফরওয়ার্ড করুন!</i>"
         )
     if len(caption) > 1024:
         caption = caption[:1020] + "…"
@@ -86,10 +86,10 @@ async def deliver_movie(target, movie_id: int) -> None:
         if isinstance(target, CallbackQuery):
             await target.answer("✅ পাঠানো হয়েছে", show_alert=False)
 
-        # মুভি ফাইল ৯০ মিনিট পর ডিলিট
+        # মুভি ফাইল কয়েক সেকেন্ড পর ডিলিট, প্রতি সেকেন্ডে সতর্কবার্তা সহ
         if sent:
             asyncio.create_task(
-                schedule_delete(bot, chat_id, sent.message_id, MOVIE_TTL)
+                movie_delete_countdown(bot, chat_id, sent.message_id, MOVIE_TTL)
             )
 
     except TelegramBadRequest as exc:

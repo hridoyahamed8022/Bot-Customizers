@@ -9,8 +9,8 @@ from datetime import datetime, timezone
 
 log = logging.getLogger(__name__)
 
-MSG_TTL = 30            # সাধারণ মেসেজ → ৩০ সেকেন্ড
-MOVIE_TTL = 10 * 60    # মুভি ফাইল → ১০ মিনিট
+MSG_TTL = 10            # সাধারণ মেসেজ → ১০ সেকেন্ড
+MOVIE_TTL = 10          # মুভি ফাইল → ১০ সেকেন্ড
 
 
 async def schedule_delete(bot, chat_id: int, message_id: int, delay: int) -> None:
@@ -20,6 +20,27 @@ async def schedule_delete(bot, chat_id: int, message_id: int, delay: int) -> Non
         await bot.delete_message(chat_id=chat_id, message_id=message_id)
     except Exception:
         pass  # মেসেজ আগেই ডিলিট হলে বা permission না থাকলে চুপ থাকো
+
+
+async def movie_delete_countdown(bot, chat_id: int, movie_message_id: int, seconds: int = MOVIE_TTL) -> None:
+    """মুভি পাঠানোর পর প্রতি সেকেন্ডে একটি সতর্কবার্তা পাঠায় এবং শেষে মুভি ডিলিট করে।"""
+    for remaining in range(seconds, 0, -1):
+        try:
+            warn = await bot.send_message(
+                chat_id,
+                f"⚠️ <b>সতর্কতা!</b> মুভিটি আর <b>{remaining} সেকেন্ড</b> পর মুছে যাবে।\n"
+                f"📤 এখনই কোনো বন্ধু বা সেভ মেসেজে ফরওয়ার্ড করে রাখুন!",
+                parse_mode="HTML",
+            )
+            asyncio.create_task(schedule_delete(bot, chat_id, warn.message_id, MSG_TTL))
+        except Exception:
+            pass
+        await asyncio.sleep(1)
+
+    try:
+        await bot.delete_message(chat_id=chat_id, message_id=movie_message_id)
+    except Exception:
+        pass
 
 
 _FILE_EXT_RE = re.compile(r"\.[A-Za-z0-9]{2,5}$")
