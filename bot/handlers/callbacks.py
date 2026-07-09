@@ -14,6 +14,7 @@ from ..db import db
 from ..config import settings as cfg
 from ..middlewares.maintenance import build_maint_text, build_maint_kb
 from ..utils import esc, schedule_delete, MOVIE_TTL, MSG_TTL
+from ..utils_ouo import shorten_url
 
 router = Router(name="callbacks")
 log = logging.getLogger(__name__)
@@ -114,6 +115,7 @@ async def send_ad_link(callback: CallbackQuery, movie_id: int) -> None:
     token = await db.create_ad_token(movie_id, callback.from_user.id)
     public_url = cfg.public_url
     ad_url = f"{public_url}/ad/{token}"
+    ad_url = await shorten_url(ad_url)
     wait_secs = max(5, int(await db.get_setting("ad_wait_seconds", "30") or 30))
 
     kb = InlineKeyboardBuilder()

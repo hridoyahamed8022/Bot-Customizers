@@ -73,6 +73,7 @@ class Settings:
     log_level: str = field(default_factory=lambda: os.getenv("LOG_LEVEL", "INFO").upper())
     db_path: str = field(default_factory=lambda: os.getenv("DB_PATH", "data/bot.sqlite3"))
     public_url: str = field(default_factory=_public_url)
+    ouo_api_key: str = field(default_factory=lambda: (os.getenv("OUO_API_KEY") or "").strip())
 
     # Anti-spam tunables
     rate_limit_seconds: float = field(
