@@ -84,6 +84,39 @@ async def _expire_bans_loop(bot) -> None:
         await asyncio.sleep(5 * 60)
 
 
+async def _startup_broadcast(bot) -> None:
+    """বট চালু/অন হলে সব ইউজারকে অটো নোটিফিকেশন পাঠাও।"""
+    from aiogram.enums import ParseMode
+    import time as _t
+    await asyncio.sleep(5)
+    try:
+        last_ts = await db.get_setting("last_startup_broadcast_ts", 0)
+        now = _t.time()
+        if now - float(last_ts or 0) < 300:
+            log.info("Skipping startup broadcast (sent recently).")
+            return
+        await db.set_setting("last_startup_broadcast_ts", now)
+        user_ids = await db.all_user_ids()
+        text = (
+            "✅  <b>বট আবার চালু হয়েছে!</b>\n"
+            "┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄\n\n"
+            "🎬  বট এখন সম্পূর্ণ সচল আছে।\n"
+            "🔍  মুভি/ড্রামার নাম ইংরেজিতে লিখে সার্চ করুন — সাথে সাথে ফাইল পেয়ে যাবেন!"
+        )
+        sent = 0
+        for uid in user_ids:
+            try:
+                await bot.send_message(uid, text, parse_mode=ParseMode.HTML)
+                sent += 1
+                if sent % 25 == 0:
+                    await asyncio.sleep(1)
+            except Exception:
+                pass
+        log.info("Startup broadcast done: %d/%d users notified.", sent, len(user_ids))
+    except Exception:
+        log.exception("_startup_broadcast error")
+
+
 async def _maintenance_end_notifier(bot) -> None:
     """মেইনটেন্যান্স সময় শেষ হলে সব ইউজারকে notify করো।"""
     from aiogram.enums import ParseMode
@@ -153,6 +186,7 @@ async def main() -> None:
     keep_alive_task = asyncio.create_task(_keep_alive())
     expire_bans_task = asyncio.create_task(_expire_bans_loop(bot))
     maint_notifier_task = asyncio.create_task(_maintenance_end_notifier(bot))
+    startup_broadcast_task = asyncio.create_task(_startup_broadcast(bot))
     stop_task = asyncio.create_task(stop_event.wait())
 
     try:
@@ -166,6 +200,7 @@ async def main() -> None:
         keep_alive_task.cancel()
         expire_bans_task.cancel()
         maint_notifier_task.cancel()
+        startup_broadcast_task.cancel()
         log.info("Shutting down…")
         try:
             await dp.stop_polling()

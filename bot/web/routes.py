@@ -1248,7 +1248,9 @@ async def ad_page(request: web.Request) -> web.Response:
 
 @require_admin
 async def settings_ad_save(request: web.Request) -> web.Response:
+    bot = request.app["bot"]
     data = await request.post()
+    prev_enabled = await db.get_setting("ad_enabled", "0")
     ad_enabled = "1" if data.get("ad_enabled") else "0"
     try:
         wait_secs = max(5, min(300, int(data.get("ad_wait_seconds") or 30)))
@@ -1258,7 +1260,35 @@ async def settings_ad_save(request: web.Request) -> web.Response:
     await db.set_setting("ad_enabled", ad_enabled)
     await db.set_setting("ad_wait_seconds", str(wait_secs))
     await db.set_setting("bot_username", bot_username)
+
+    if prev_enabled != "1" and ad_enabled == "1":
+        asyncio.create_task(_broadcast_ad_enabled(bot, wait_secs))
+
     return _js_redirect("/settings" + _flash(request, "বিজ্ঞাপন সেটিংস সেভ হয়েছে! ✅", "ok"))
+
+
+async def _broadcast_ad_enabled(bot: Any, wait_secs: int) -> None:
+    """অ্যাড সিস্টেম চালু হলে সব ইউজারকে নোটিফিকেশন পাঠাও (background)."""
+    user_ids = await db.all_user_ids()
+    text = (
+        "━━━━━━━━━━━━━━━━━━━━━\n"
+        "📢  <b>নোটিশ</b>\n"
+        "━━━━━━━━━━━━━━━━━━━━━\n\n"
+        "🎬 এখন থেকে মুভি/ড্রামা ফাইল পাওয়ার আগে একটি ছোট বিজ্ঞাপন পেজে "
+        f"অপেক্ষা করতে হবে (মাত্র {wait_secs} সেকেন্ড)।\n\n"
+        "⏳ সময় শেষ হলেই আপনার ফাইল বট নিজেই পাঠিয়ে দেবে।\n"
+        "🙏 আমাদের সার্ভিস চালু রাখতে সহায়তা করার জন্য ধন্যবাদ!"
+    )
+    sent = 0
+    for uid in user_ids:
+        try:
+            await bot.send_message(uid, text, parse_mode="HTML")
+            sent += 1
+            if sent % 25 == 0:
+                await asyncio.sleep(1)
+        except Exception:
+            pass
+    log.info("Ad-enabled broadcast done: %d/%d users notified", sent, len(user_ids))
 
 
 # ──────────────────────────────────────────────────────────────── #

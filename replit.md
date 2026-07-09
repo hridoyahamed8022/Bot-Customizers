@@ -32,6 +32,10 @@ A Telegram bot (@Moviex_hub_bot) that lets users search for and receive Bengali/
   3. Bot's `/start get_{token}` handler validates the token (exists, unused, unexpired, matches user) then delivers the movie and marks the token used.
   - Configurable via admin panel Settings page: `ad_enabled`, `ad_wait_seconds` (5–300s), `bot_username` — stored as normal `settings` k/v rows.
 - **Admin panel redirects use JS (`window.location.replace`), not HTTP 302** — see gotcha below.
+- **Auto broadcast notifications** go out to all users (`db.all_user_ids()`) on three triggers, each fire-and-forget via `asyncio.create_task`:
+  1. Bot process startup (`main.py::_startup_broadcast`) — guarded by a `last_startup_broadcast_ts` setting so rapid restarts within 5 minutes don't re-spam users.
+  2. Maintenance mode turned ON (`bot/web/routes.py::_broadcast_maintenance`, called from `maintenance_toggle`).
+  3. Ad system toggled ON for the first time (`bot/web/routes.py::_broadcast_ad_enabled`, called from `settings_ad_save` only on the off→on transition).
 
 ## Product
 
