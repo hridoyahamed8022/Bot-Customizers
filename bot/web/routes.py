@@ -309,6 +309,38 @@ async def movie_delete(request: web.Request) -> web.Response:
     return _js_redirect("/movies" + _flash(request, "মুভি মুছে ফেলা হয়েছে।", "ok"))
 
 
+@require_admin
+async def movie_edit_form(request: web.Request) -> web.Response:
+    try:
+        mid = int(request.query.get("id", "0"))
+    except (TypeError, ValueError):
+        return _js_redirect("/movies")
+    movie = await db.get_movie(mid)
+    if not movie:
+        return _js_redirect("/movies" + _flash(request, "মুভিটি পাওয়া যায়নি।", "err"))
+    return aiohttp_jinja2.render_template(
+        "movie_edit.html",
+        request,
+        {"movie": movie, "flash": _read_flash(request)},
+    )
+
+
+@require_admin
+async def movie_edit_save(request: web.Request) -> web.Response:
+    data = await request.post()
+    try:
+        mid = int(data.get("id", "0"))
+    except (TypeError, ValueError):
+        return _js_redirect("/movies")
+    title = (data.get("title") or "").strip()
+    caption = (data.get("caption") or "").strip()
+    if not title:
+        return _js_redirect(f"/movies/edit?id={mid}" + _flash(request, "শিরোনাম খালি রাখা যাবে না।", "err"))
+    await db.update_movie(mid, title, caption)
+    await db.log_event("movie_edit", {"id": mid, "title": title, "by": request["user_id"]})
+    return _js_redirect("/movies" + _flash(request, f"✅ মুভি আপডেট হয়েছে: {title}", "ok"))
+
+
 # ──────────────────────────────────────────────────────────────── #
 # Post to group/channel
 # ──────────────────────────────────────────────────────────────── #
@@ -668,11 +700,64 @@ async def bot_messages_page(request: web.Request) -> web.Response:
     for cfg in BOT_MESSAGES_CONFIG:
         val = await db.get_bot_message(cfg["key"], cfg["default"])
         msgs.append({"key": cfg["key"], "label": cfg["label"], "value": val})
+    welcome_photo_file_id = await db.get_setting("welcome_photo_file_id", "")
+    welcome_photo_caption = await db.get_setting("welcome_photo_caption", "")
     return aiohttp_jinja2.render_template(
         "bot_messages.html",
         request,
-        {"messages": msgs, "flash": _read_flash(request)},
+        {
+            "messages": msgs,
+            "flash": _read_flash(request),
+            "welcome_photo_file_id": welcome_photo_file_id or "",
+            "welcome_photo_caption": welcome_photo_caption or "",
+        },
     )
+
+
+@require_admin
+async def bot_messages_welcome_photo(request: web.Request) -> web.Response:
+    """ওয়েলকাম ছবি আপলোড করে bot-এ পাঠিয়ে file_id সেভ করে।"""
+    bot = request.app["bot"]
+    reader = await request.multipart()
+    photo_bytes: Optional[bytes] = None
+    photo_filename: Optional[str] = None
+    caption = ""
+    async for part in reader:
+        if part.name == "photo" and part.filename:
+            data_bytes = await part.read(decode=False)
+            if data_bytes:
+                photo_bytes = data_bytes
+                photo_filename = part.filename
+        elif part.name == "caption":
+            caption = (await part.text()) or ""
+
+    if not photo_bytes:
+        return _js_redirect("/bot-messages" + _flash(request, "কোনো ছবি নির্বাচন করা হয়নি।", "err"))
+
+    admin_chat_id = settings.admin_chat_id
+    if not admin_chat_id:
+        return _js_redirect("/bot-messages" + _flash(request, "ADMIN_CHAT_ID সেট করা নেই — ছবি সেভ করা যাচ্ছে না।", "err"))
+
+    try:
+        from aiogram.types import BufferedInputFile as BIF
+        photo_file = BIF(photo_bytes, filename=photo_filename or "welcome.jpg")
+        sent = await bot.send_photo(admin_chat_id, photo=photo_file, caption=caption or None)
+        file_id = sent.photo[-1].file_id
+        await db.set_setting("welcome_photo_file_id", file_id)
+        await db.set_setting("welcome_photo_caption", caption.strip())
+        await db.log_event("welcome_photo_set", {"by": request["user_id"]})
+        return _js_redirect("/bot-messages" + _flash(request, "✅ ওয়েলকাম ছবি সেট হয়েছে!", "ok"))
+    except Exception as exc:
+        log.exception("welcome photo upload failed")
+        return _js_redirect("/bot-messages" + _flash(request, f"ত্রুটি: {exc}", "err"))
+
+
+@require_admin
+async def bot_messages_welcome_photo_delete(request: web.Request) -> web.Response:
+    await db.set_setting("welcome_photo_file_id", "")
+    await db.set_setting("welcome_photo_caption", "")
+    await db.log_event("welcome_photo_remove", {"by": request["user_id"]})
+    return _js_redirect("/bot-messages" + _flash(request, "ওয়েলকাম ছবি সরানো হয়েছে।", "ok"))
 
 
 @require_admin
@@ -878,6 +963,21 @@ async def user_ban(request: web.Request) -> web.Response:
     except Exception:
         pass
 
+    return _js_redirect("/users" + _flash(request, msg, "ok"))
+
+
+@require_admin
+async def user_vip_toggle(request: web.Request) -> web.Response:
+    data = await request.post()
+    try:
+        target_uid = int(data.get("user_id"))
+    except (TypeError, ValueError):
+        return _js_redirect("/users" + _flash(request, "ভুল ইউজার আইডি।", "err"))
+    action = (data.get("action") or "").strip()
+    vip = action == "add"
+    await db.set_vip(target_uid, vip)
+    await db.log_event("user_vip", {"uid": target_uid, "vip": vip, "by": request["user_id"]})
+    msg = f"⭐ ইউজার #{target_uid}-কে VIP করা হয়েছে।" if vip else f"ইউজার #{target_uid}-এর VIP সরানো হয়েছে।"
     return _js_redirect("/users" + _flash(request, msg, "ok"))
 
 
@@ -1312,6 +1412,8 @@ def setup_routes(app: web.Application) -> None:
 
     app.router.add_get("/movies", movies_list)
     app.router.add_post("/movies/delete", movie_delete)
+    app.router.add_get("/movies/edit", movie_edit_form)
+    app.router.add_post("/movies/edit", movie_edit_save)
 
     app.router.add_get("/post", post_form)
     app.router.add_post("/post", post_submit)
@@ -1329,6 +1431,8 @@ def setup_routes(app: web.Application) -> None:
     app.router.add_get("/bot-messages", bot_messages_page)
     app.router.add_post("/bot-messages/save", bot_messages_save)
     app.router.add_post("/bot-messages/reset", bot_messages_reset)
+    app.router.add_post("/bot-messages/welcome-photo", bot_messages_welcome_photo)
+    app.router.add_post("/bot-messages/welcome-photo/delete", bot_messages_welcome_photo_delete)
 
     # Multi-channel/group manager
     app.router.add_get("/channels", channels_page)
@@ -1343,6 +1447,7 @@ def setup_routes(app: web.Application) -> None:
     app.router.add_get("/users", users_page)
     app.router.add_post("/users/send-dm", user_send_dm)
     app.router.add_post("/users/ban", user_ban)
+    app.router.add_post("/users/vip", user_vip_toggle)
 
     # Statistics
     app.router.add_get("/stats", stats_page)

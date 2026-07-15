@@ -229,7 +229,8 @@ async def cb_get_movie(callback: CallbackQuery) -> None:
         return
 
     ad_enabled = await db.get_setting("ad_enabled", "0")
-    if ad_enabled == "1" and cfg.public_url:
+    vip = await db.is_vip(callback.from_user.id)
+    if ad_enabled == "1" and cfg.public_url and not vip:
         await send_ad_link(callback, movie_id)
     else:
         await deliver_movie(callback, movie_id)

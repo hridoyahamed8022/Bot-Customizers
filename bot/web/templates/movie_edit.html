@@ -1,0 +1,59 @@
+{% extends "base.html" %}
+{% block title %}মুভি এডিট — {{ movie.title }}{% endblock %}
+{% block content %}
+<div style="max-width:700px">
+
+<div style="display:flex;align-items:center;gap:.8rem;margin-bottom:1.2rem">
+  <a href="/movies" class="btn ghost" style="padding:.3rem .7rem;font-size:.85rem">← মুভি লিস্ট</a>
+  <h1 style="margin:0;font-size:1.3rem">✏️ মুভি এডিট</h1>
+</div>
+
+{% if flash %}
+<div class="flash flash-{{ flash.kind }}">{{ flash.msg }}</div>
+{% endif %}
+
+<div class="card-block" style="margin-bottom:1rem;padding:.8rem 1rem;background:var(--panel-2);border-radius:8px;border:1px solid var(--border)">
+  <div style="display:flex;gap:1rem;flex-wrap:wrap;font-size:.85rem;color:var(--muted)">
+    <span><strong>#{{ movie.id }}</strong></span>
+    <span>📁 {{ movie.file_type }}</span>
+    <span>📦 {{ movie.size_bytes | humansize }}</span>
+    <span>👁 {{ movie.hits }} বার ডাউনলোড</span>
+    <span>🗓 {{ movie.added_at | fmtdate }}</span>
+  </div>
+  {% if movie.file_name %}
+  <div style="margin-top:.4rem;font-size:.82rem;color:var(--muted)">ফাইল: <code>{{ movie.file_name }}</code></div>
+  {% endif %}
+</div>
+
+<form method="post" action="/movies/edit">
+  <input type="hidden" name="id" value="{{ movie.id }}">
+
+  <section class="card-block" style="margin-bottom:1.2rem">
+    <label style="display:block;margin-bottom:.6rem">
+      <span style="font-weight:600;display:block;margin-bottom:.35rem">🎬 শিরোনাম (Title) <span style="color:#f87171">*</span></span>
+      <input type="text" name="title" value="{{ movie.title }}"
+        placeholder="মুভির ইংরেজি নাম লিখুন…"
+        style="width:100%;box-sizing:border-box;font-size:1rem;padding:.5rem .7rem;background:var(--panel-2);border:1px solid var(--border);color:var(--text);border-radius:6px"
+        required autofocus>
+      <span class="muted" style="font-size:.78rem">সার্চে এই নামটি ব্যবহার হয় — ইংরেজিতে লিখুন।</span>
+    </label>
+  </section>
+
+  <section class="card-block" style="margin-bottom:1.5rem">
+    <label style="display:block;margin-bottom:.6rem">
+      <span style="font-weight:600;display:block;margin-bottom:.35rem">📝 ক্যাপশন (Caption) <span class="muted" style="font-weight:400">(ঐচ্ছিক)</span></span>
+      <textarea name="caption" rows="6"
+        placeholder="মুভির বিবরণ লিখুন। HTML ট্যাগ সাপোর্টেড: &lt;b&gt;, &lt;i&gt;, &lt;code&gt;"
+        style="width:100%;box-sizing:border-box;font-family:monospace;font-size:.9rem;padding:.5rem .7rem;background:var(--panel-2);border:1px solid var(--border);color:var(--text);border-radius:6px;resize:vertical">{{ movie.caption or '' }}</textarea>
+      <span class="muted" style="font-size:.78rem">মুভি পাঠানোর সময় ফাইলের সাথে এই ক্যাপশন যাবে।</span>
+    </label>
+  </section>
+
+  <div style="display:flex;gap:.6rem;flex-wrap:wrap">
+    <button type="submit" class="btn primary" style="padding:.5rem 1.4rem;font-size:.95rem">💾 সংরক্ষণ করুন</button>
+    <a href="/movies" class="btn ghost" style="padding:.5rem 1rem;font-size:.95rem">বাতিল</a>
+  </div>
+</form>
+
+</div>
+{% endblock %}

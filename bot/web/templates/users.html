@@ -61,8 +61,11 @@
             <br><span class="muted" style="font-size:.75rem">স্থায়ী</span>
           {% endif %}
         {% elif u.is_blocked %}<span class="badge warn">ব্লকড</span>
-        {% elif u.verified %}<span class="badge ok">✔ ভেরিফাইড</span>
-        {% else %}<span class="muted">সাধারণ</span>{% endif %}
+        {% else %}
+          {% if u.is_vip %}<span class="badge vip">⭐ VIP</span> {% endif %}
+          {% if u.verified %}<span class="badge ok">✔ ভেরিফাইড</span>
+          {% else %}<span class="muted">সাধারণ</span>{% endif %}
+        {% endif %}
       </td>
       <td class="muted" style="font-size:.82rem;white-space:nowrap">{{ u.last_seen | fmtdate }}</td>
       <td style="white-space:nowrap;display:flex;gap:.3rem;flex-wrap:wrap">
@@ -81,6 +84,19 @@
             onclick="openBan({{ u.user_id }}, '{{ ((u.first_name or '') ~ (' ' ~ u.last_name if u.last_name else '')) | replace("'", "\\'") }}')">
             ⛔ ব্যান
           </button>
+        {% endif %}
+        {% if u.is_vip %}
+          <form method="post" action="/users/vip" style="margin:0">
+            <input type="hidden" name="user_id" value="{{ u.user_id }}">
+            <input type="hidden" name="action" value="remove">
+            <button type="submit" class="btn ghost" style="padding:.25rem .55rem;font-size:.8rem;border-color:#a78bfa;color:#a78bfa">✕ VIP</button>
+          </form>
+        {% else %}
+          <form method="post" action="/users/vip" style="margin:0">
+            <input type="hidden" name="user_id" value="{{ u.user_id }}">
+            <input type="hidden" name="action" value="add">
+            <button type="submit" class="btn ghost" style="padding:.25rem .55rem;font-size:.8rem;border-color:#f59e0b;color:#f59e0b">⭐ VIP</button>
+          </form>
         {% endif %}
       </td>
     </tr>
@@ -185,6 +201,7 @@
 .badge.ok{background:#1a4a2e;color:#4ade80}
 .badge.warn{background:#4a3a00;color:#facc15}
 .badge.danger{background:#4a1a1a;color:#f87171}
+.badge.vip{background:#3b2200;color:#f59e0b;border:1px solid #92400e}
 .table th,.table td{padding:.5rem .7rem;border-bottom:1px solid var(--border,#333);vertical-align:middle}
 .table th{font-size:.8rem;text-transform:uppercase;letter-spacing:.04em;color:var(--muted,#888)}
 .btn.ok{background:#1a4a2e;color:#4ade80;border:1px solid #2d7a4a}

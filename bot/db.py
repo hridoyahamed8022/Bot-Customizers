@@ -218,6 +218,7 @@ class Database:
         await self._conn.executescript(_SCHEMA)
         await self._add_column_if_missing("users", "verified", "INTEGER NOT NULL DEFAULT 0")
         await self._add_column_if_missing("users", "verified_at", "REAL")
+        await self._add_column_if_missing("users", "is_vip", "INTEGER NOT NULL DEFAULT 0")
         await self._add_column_if_missing("bans", "expires_at", "REAL")
         await self._add_column_if_missing("movie_requests", "vote_count", "INTEGER NOT NULL DEFAULT 0")
         await self._add_column_if_missing("movie_requests", "notified", "INTEGER NOT NULL DEFAULT 0")
@@ -388,6 +389,22 @@ class Database:
         await self.execute("UPDATE users SET verified = 0, verified_at = NULL")
 
     # ------------------------------------------------------------------ #
+    # VIP system
+    # ------------------------------------------------------------------ #
+    async def is_vip(self, user_id: int) -> bool:
+        row = await self.fetch_one("SELECT is_vip FROM users WHERE user_id = ?", (user_id,))
+        return bool(row and row["is_vip"])
+
+    async def set_vip(self, user_id: int, vip: bool = True) -> None:
+        await self.execute(
+            "UPDATE users SET is_vip = ? WHERE user_id = ?",
+            (1 if vip else 0, user_id),
+        )
+
+    async def count_vip_users(self) -> int:
+        return int(await self.fetch_value("SELECT COUNT(*) FROM users WHERE is_vip=1") or 0)
+
+    # ------------------------------------------------------------------ #
     # bans
     # ------------------------------------------------------------------ #
     async def is_banned(self, user_id: int) -> bool:
@@ -475,6 +492,13 @@ class Database:
 
     async def delete_movie(self, movie_id: int) -> None:
         await self.execute("DELETE FROM movies WHERE id = ?", (movie_id,))
+
+    async def update_movie(self, movie_id: int, title: str, caption: str) -> None:
+        """মুভির শিরোনাম ও ক্যাপশন আপডেট করে (FTS ট্রিগার স্বয়ংক্রিয়ভাবে আপডেট হয়)।"""
+        await self.execute(
+            "UPDATE movies SET title=?, caption=? WHERE id=?",
+            (title.strip(), caption.strip(), movie_id),
+        )
 
     async def increment_hits(self, movie_id: int) -> None:
         await self.execute("UPDATE movies SET hits = hits + 1 WHERE id = ?", (movie_id,))

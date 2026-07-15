@@ -126,7 +126,23 @@ async def cmd_start(
 
     if is_new:
         popular = await db.get_popular_movies(limit=5)
-        sent = await message.answer(NEW_USER_WELCOME, reply_markup=new_user_kb(popular))
+        welcome_photo_file_id = await db.get_setting("welcome_photo_file_id", "")
+        welcome_photo_caption = await db.get_setting("welcome_photo_caption", "")
+        if welcome_photo_file_id:
+            caption_text = (
+                welcome_photo_caption
+                if welcome_photo_caption
+                else NEW_USER_WELCOME
+            )
+            if len(caption_text) > 1024:
+                caption_text = caption_text[:1020] + "…"
+            sent = await message.answer_photo(
+                photo=welcome_photo_file_id,
+                caption=caption_text,
+                reply_markup=new_user_kb(popular),
+            )
+        else:
+            sent = await message.answer(NEW_USER_WELCOME, reply_markup=new_user_kb(popular))
         asyncio.create_task(
             schedule_delete(message.bot, message.from_user.id, sent.message_id, MSG_TTL)
         )
