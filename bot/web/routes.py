@@ -19,7 +19,7 @@ from aiohttp import web
 
 from ..config import settings
 from ..db import db
-from ..utils import esc
+from ..utils import esc, schedule_delete, MSG_TTL
 from .auth import (
     check_credentials,
     clear_session_cookie,
@@ -405,13 +405,15 @@ _active_broadcasts: Dict[int, Dict[str, Any]] = {}
 # ──────────────────────────────────────────────────────────────── #
 async def _silent_send(bot, user_id: int, text: str, kb=None) -> None:
     try:
-        await bot.send_message(user_id, text, reply_markup=kb)
+        msg = await bot.send_message(user_id, text, reply_markup=kb)
+        asyncio.create_task(schedule_delete(bot, user_id, msg.message_id, MSG_TTL))
     except TelegramForbiddenError:
         await db.mark_blocked(user_id, True)
     except TelegramRetryAfter as exc:
         await asyncio.sleep(exc.retry_after + 1)
         try:
-            await bot.send_message(user_id, text, reply_markup=kb)
+            msg = await bot.send_message(user_id, text, reply_markup=kb)
+            asyncio.create_task(schedule_delete(bot, user_id, msg.message_id, MSG_TTL))
         except Exception:
             pass
     except Exception:
@@ -444,20 +446,24 @@ async def _broadcast_worker(
     total = len(targets)
     for i, uid in enumerate(targets, start=1):
         try:
-            await _send_to_chat(
+            msg = await _send_to_chat(
                 bot, uid,
                 text=text, media_bytes=media_bytes, media_filename=media_filename,
                 media_kind=media_kind, reply_markup=kb,
             )
+            if msg:
+                asyncio.create_task(schedule_delete(bot, uid, msg.message_id, MSG_TTL))
             sent += 1
         except TelegramRetryAfter as exc:
             await asyncio.sleep(exc.retry_after + 1)
             try:
-                await _send_to_chat(
+                msg = await _send_to_chat(
                     bot, uid,
                     text=text, media_bytes=media_bytes, media_filename=media_filename,
                     media_kind=media_kind, reply_markup=kb,
                 )
+                if msg:
+                    asyncio.create_task(schedule_delete(bot, uid, msg.message_id, MSG_TTL))
                 sent += 1
             except Exception:
                 failed += 1
@@ -1034,7 +1040,8 @@ async def _broadcast_maintenance(bot: Any, duration_mins: int) -> None:
     sent = 0
     for uid in user_ids:
         try:
-            await bot.send_message(uid, text, reply_markup=kb)
+            msg = await bot.send_message(uid, text, reply_markup=kb)
+            asyncio.create_task(schedule_delete(bot, uid, msg.message_id, MSG_TTL))
             sent += 1
             if sent % 25 == 0:
                 await asyncio.sleep(1)
@@ -1282,7 +1289,8 @@ async def _broadcast_ad_enabled(bot: Any, wait_secs: int) -> None:
     sent = 0
     for uid in user_ids:
         try:
-            await bot.send_message(uid, text, parse_mode="HTML")
+            msg = await bot.send_message(uid, text, parse_mode="HTML")
+            asyncio.create_task(schedule_delete(bot, uid, msg.message_id, MSG_TTL))
             sent += 1
             if sent % 25 == 0:
                 await asyncio.sleep(1)

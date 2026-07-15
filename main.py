@@ -96,6 +96,7 @@ async def _startup_broadcast(bot) -> None:
             log.info("Skipping startup broadcast (sent recently).")
             return
         await db.set_setting("last_startup_broadcast_ts", now)
+        from bot.utils import schedule_delete, MSG_TTL
         user_ids = await db.all_user_ids()
         text = (
             "✅  <b>বট আবার চালু হয়েছে!</b>\n"
@@ -106,7 +107,8 @@ async def _startup_broadcast(bot) -> None:
         sent = 0
         for uid in user_ids:
             try:
-                await bot.send_message(uid, text, parse_mode=ParseMode.HTML)
+                msg = await bot.send_message(uid, text, parse_mode=ParseMode.HTML)
+                asyncio.create_task(schedule_delete(bot, uid, msg.message_id, MSG_TTL))
                 sent += 1
                 if sent % 25 == 0:
                     await asyncio.sleep(1)
@@ -148,11 +150,13 @@ async def _maintenance_end_notifier(bot) -> None:
                             InlineKeyboardButton(text="💬  আমাদের গ্রুপ", url=disc_url)
                         ]])
 
+                    from bot.utils import schedule_delete, MSG_TTL
                     user_ids = await db.all_user_ids()
                     sent = 0
                     for uid in user_ids:
                         try:
-                            await bot.send_message(uid, text, reply_markup=kb, parse_mode=ParseMode.HTML)
+                            msg = await bot.send_message(uid, text, reply_markup=kb, parse_mode=ParseMode.HTML)
+                            asyncio.create_task(schedule_delete(bot, uid, msg.message_id, MSG_TTL))
                             sent += 1
                             if sent % 25 == 0:
                                 await asyncio.sleep(1)
