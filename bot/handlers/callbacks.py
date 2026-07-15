@@ -105,40 +105,99 @@ async def deliver_movie(target, movie_id: int) -> None:
             await target.answer("❌ ফাইল পাঠানো যায়নি।", show_alert=True)
 
 
+def _countdown_text(title: str, remaining: int, total: int, ad_url: str) -> str:
+    bar_filled = round((total - remaining) / total * 10)
+    bar = "🟣" * bar_filled + "⚫" * (10 - bar_filled)
+    return (
+        f"🎬 <b>{esc(title)}</b>\n\n"
+        f"📺 বিজ্ঞাপন লিংক খুলুন, তারপর এখানেই মুভি আসবে!\n\n"
+        f"{bar}\n"
+        f"⏳ <b>{remaining}</b> সেকেন্ড বাকি...\n\n"
+        f"<i>💡 বাটনে ক্লিক করে বিজ্ঞাপনটি দেখুন — {remaining} সেকেন্ড পর মুভি এখানে অটো আসবে।</i>"
+    )
+
+
+async def _ad_countdown_deliver(
+    bot,
+    chat_id: int,
+    msg_id: int,
+    movie_id: int,
+    ad_url: str,
+    title: str,
+    total: int,
+) -> None:
+    """বাটন ক্লিকের পর বটে কাউন্টডাউন দেখায় এবং শেষে মুভি ডেলিভার করে।"""
+    kb = InlineKeyboardBuilder()
+    kb.button(text="📺 বিজ্ঞাপন দেখুন", url=ad_url)
+    kb.adjust(1)
+
+    for remaining in range(total, 0, -1):
+        try:
+            await bot.edit_message_text(
+                chat_id=chat_id,
+                message_id=msg_id,
+                text=_countdown_text(title, remaining, total, ad_url),
+                reply_markup=kb.as_markup(),
+                parse_mode="HTML",
+            )
+        except Exception:
+            pass
+        await asyncio.sleep(1)
+
+    try:
+        await bot.delete_message(chat_id=chat_id, message_id=msg_id)
+    except Exception:
+        pass
+
+    class _FakeMessage:
+        def __init__(self, b, cid):
+            self.bot = b
+            self.chat = type("C", (), {"id": cid})()
+            self.from_user = type("U", (), {"id": cid})()
+        async def answer(self, text, **kw):
+            return await self.bot.send_message(self.chat.id, text, **kw)
+
+    fake = _FakeMessage(bot, chat_id)
+    await deliver_movie(fake, movie_id)
+
+
 async def send_ad_link(callback: CallbackQuery, movie_id: int) -> None:
-    """Ad system চালু থাকলে movie deliver না করে countdown link পাঠায়।"""
+    """Ad system চালু থাকলে বটেই কাউন্টডাউন শুরু করে, শেষে মুভি দেয়।"""
     movie = await db.get_movie(movie_id)
     if not movie:
         await callback.answer("⚠️ এই ফাইলটি লাইব্রেরিতে আর নেই।", show_alert=True)
         return
 
-    token = await db.create_ad_token(movie_id, callback.from_user.id)
+    wait_secs = max(5, int(await db.get_setting("ad_wait_seconds", "20") or 20))
+
     public_url = cfg.public_url
-    ad_url = f"{public_url}/ad/{token}"
-    ad_url = await shorten_url(ad_url)
-    wait_secs = max(5, int(await db.get_setting("ad_wait_seconds", "30") or 30))
+    token = await db.create_ad_token(movie_id, callback.from_user.id)
+    raw_url = f"{public_url}/ad/{token}"
+    ad_url = await shorten_url(raw_url)
 
     kb = InlineKeyboardBuilder()
-    kb.button(text=f"📺 বিজ্ঞাপন দেখুন ({wait_secs}s) → মুভি পান", url=ad_url)
-    kb.button(text="🏠 হোম", callback_data="home")
+    kb.button(text="📺 বিজ্ঞাপন দেখুন", url=ad_url)
     kb.adjust(1)
 
-    text = (
-        f"🎬 <b>{esc(movie['title'])}</b>\n\n"
-        f"⚡ মুভিটি পেতে নিচের বাটনে ক্লিক করুন।\n\n"
-        f"1️⃣ প্রথমে একটি বিজ্ঞাপন পেজ আসবে — ওখানে যা বলা থাকবে (যেমন ক্লিক/ভেরিফাই) করে এগিয়ে যান।\n"
-        f"2️⃣ তারপর আমাদের কাউন্টডাউন পেজ আসবে, সেখানে <b>{wait_secs} সেকেন্ড</b> অপেক্ষা করলেই মুভি পাওয়ার বাটন চালু হবে।\n\n"
-        f"<i>💡 কোনো পেজ বন্ধ করলে বা মাঝপথে চলে গেলে মুভি আসবে না — আবার বাটনে ক্লিক করে নতুন লিংক নিন।</i>"
-    )
+    init_text = _countdown_text(movie["title"], wait_secs, wait_secs, ad_url)
 
     try:
-        await callback.message.edit_text(text, reply_markup=kb.as_markup())
+        await callback.message.edit_text(init_text, reply_markup=kb.as_markup())
         sent = callback.message
     except TelegramBadRequest:
-        sent = await callback.message.answer(text, reply_markup=kb.as_markup())
+        sent = await callback.message.answer(init_text, reply_markup=kb.as_markup())
     await callback.answer()
+
     asyncio.create_task(
-        schedule_delete(callback.bot, callback.from_user.id, sent.message_id, MSG_TTL)
+        _ad_countdown_deliver(
+            callback.bot,
+            callback.from_user.id,
+            sent.message_id,
+            movie_id,
+            ad_url,
+            movie["title"],
+            wait_secs,
+        )
     )
 
 
