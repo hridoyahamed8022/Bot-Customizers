@@ -9,8 +9,12 @@ from datetime import datetime, timezone
 
 log = logging.getLogger(__name__)
 
-MSG_TTL = 10            # সাধারণ মেসেজ → ১০ সেকেন্ড
-MOVIE_TTL = 10          # মুভি ফাইল → ১০ সেকেন্ড
+MSG_TTL = 30            # সাধারণ মেসেজ → ৩০ সেকেন্ড
+MOVIE_TTL = 30          # মুভি ফাইল → ৩০ সেকেন্ড
+
+# মুভি কাউন্টডাউন: ৩০ সেকেন্ডে ৬টি মেসেজ, প্রতি ৫ সেকেন্টে একটি
+_WARN_INTERVAL = 5      # প্রতি কত সেকেন্ডে সতর্কবার্তা
+_WARN_COUNT    = 6      # মোট কতটি সতর্কবার্তা
 
 
 async def schedule_delete(bot, chat_id: int, message_id: int, delay: int) -> None:
@@ -23,19 +27,25 @@ async def schedule_delete(bot, chat_id: int, message_id: int, delay: int) -> Non
 
 
 async def movie_delete_countdown(bot, chat_id: int, movie_message_id: int, seconds: int = MOVIE_TTL) -> None:
-    """মুভি পাঠানোর পর প্রতি সেকেন্ডে একটি সতর্কবার্তা পাঠায় এবং শেষে মুভি ডিলিট করে।"""
-    for remaining in range(seconds, 0, -1):
+    """মুভি পাঠানোর পর প্রতি ৫ সেকেন্ডে একটি সতর্কবার্তা পাঠায়, মোট ৬টি, তারপর মুভি ডিলিট করে।"""
+    _EMOJIS = ["🔴", "🟠", "🟡", "🟢", "🔵", "🟣"]
+    remaining_secs = seconds
+    for i in range(_WARN_COUNT):
+        emoji = _EMOJIS[i % len(_EMOJIS)]
         try:
             warn = await bot.send_message(
                 chat_id,
-                f"⚠️ <b>সতর্কতা!</b> মুভিটি আর <b>{remaining} সেকেন্ড</b> পর মুছে যাবে।\n"
-                f"📤 এখনই কোনো বন্ধু বা সেভ মেসেজে ফরওয়ার্ড করে রাখুন!",
+                f"{emoji} <b>সতর্কতা {i + 1}/{_WARN_COUNT}!</b>\n\n"
+                f"⏳ মুভিটি আর <b>{remaining_secs} সেকেন্ড</b> পর মুছে যাবে!\n\n"
+                f"📤 <b>এখনই ফরওয়ার্ড করুন</b> — বন্ধু, আত্মীয় বা নিজের Saved Messages-এ রাখুন,\n"
+                f"নয়তো মুভিটি চিরতরে চলে যাবে! 🙏",
                 parse_mode="HTML",
             )
             asyncio.create_task(schedule_delete(bot, chat_id, warn.message_id, MSG_TTL))
         except Exception:
             pass
-        await asyncio.sleep(1)
+        await asyncio.sleep(_WARN_INTERVAL)
+        remaining_secs -= _WARN_INTERVAL
 
     try:
         await bot.delete_message(chat_id=chat_id, message_id=movie_message_id)
