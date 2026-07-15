@@ -124,31 +124,37 @@ async def cmd_start(
             await deliver_movie(message, mid)
             return
 
-    if is_new:
+    # ওয়েলকাম ছবি সেট থাকলে নতুন + পুরনো উভয় ইউজারই ছবিসহ মেসেজ পাবে
+    welcome_photo_file_id = await db.get_setting("welcome_photo_file_id", "")
+    welcome_photo_caption = await db.get_setting("welcome_photo_caption", "")
+
+    if welcome_photo_file_id:
         popular = await db.get_popular_movies(limit=5)
-        welcome_photo_file_id = await db.get_setting("welcome_photo_file_id", "")
-        welcome_photo_caption = await db.get_setting("welcome_photo_caption", "")
-        if welcome_photo_file_id:
-            caption_text = (
-                welcome_photo_caption.strip()
-                if welcome_photo_caption and welcome_photo_caption.strip()
-                else NEW_USER_WELCOME
-            )
-            if len(caption_text) > 1024:
-                caption_text = caption_text[:1020] + "…"
-            sent = await message.answer_photo(
-                photo=welcome_photo_file_id,
-                caption=caption_text,
-                caption_entities=None,
-                parse_mode="HTML",
-                reply_markup=new_user_kb(popular),
-            )
-        else:
-            sent = await message.answer(
-                NEW_USER_WELCOME,
-                parse_mode="HTML",
-                reply_markup=new_user_kb(popular),
-            )
+        home_text = await get_home_text()
+        caption_text = (
+            welcome_photo_caption.strip()
+            if welcome_photo_caption and welcome_photo_caption.strip()
+            else home_text
+        )
+        if len(caption_text) > 1024:
+            caption_text = caption_text[:1020] + "…"
+        sent = await message.answer_photo(
+            photo=welcome_photo_file_id,
+            caption=caption_text,
+            caption_entities=None,
+            parse_mode="HTML",
+            reply_markup=home_kb(),
+        )
+        asyncio.create_task(
+            schedule_delete(message.bot, message.from_user.id, sent.message_id, MSG_TTL)
+        )
+    elif is_new:
+        popular = await db.get_popular_movies(limit=5)
+        sent = await message.answer(
+            NEW_USER_WELCOME,
+            parse_mode="HTML",
+            reply_markup=new_user_kb(popular),
+        )
         asyncio.create_task(
             schedule_delete(message.bot, message.from_user.id, sent.message_id, MSG_TTL)
         )
