@@ -130,8 +130,8 @@ async def cmd_start(
         welcome_photo_caption = await db.get_setting("welcome_photo_caption", "")
         if welcome_photo_file_id:
             caption_text = (
-                welcome_photo_caption
-                if welcome_photo_caption
+                welcome_photo_caption.strip()
+                if welcome_photo_caption and welcome_photo_caption.strip()
                 else NEW_USER_WELCOME
             )
             if len(caption_text) > 1024:
@@ -139,10 +139,16 @@ async def cmd_start(
             sent = await message.answer_photo(
                 photo=welcome_photo_file_id,
                 caption=caption_text,
+                caption_entities=None,
+                parse_mode="HTML",
                 reply_markup=new_user_kb(popular),
             )
         else:
-            sent = await message.answer(NEW_USER_WELCOME, reply_markup=new_user_kb(popular))
+            sent = await message.answer(
+                NEW_USER_WELCOME,
+                parse_mode="HTML",
+                reply_markup=new_user_kb(popular),
+            )
         asyncio.create_task(
             schedule_delete(message.bot, message.from_user.id, sent.message_id, MSG_TTL)
         )
