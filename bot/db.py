@@ -969,6 +969,26 @@ class Database:
         )
         return int(v or 0)
 
+    async def find_pending_request(self, user_id: int, title: str):
+        """একই ইউজারের একই মুভির pending/open রিকোয়েস্ট খোঁজে (case-insensitive)।"""
+        return await self.fetch_one(
+            """
+            SELECT * FROM movie_requests
+            WHERE user_id=? AND status='pending'
+              AND LOWER(TRIM(title))=LOWER(TRIM(?))
+            ORDER BY created_at DESC LIMIT 1
+            """,
+            (user_id, title),
+        )
+
+    async def count_pending_same_title_all_users(self, title: str) -> int:
+        """সব ইউজার মিলিয়ে একই মুভির কতটি pending রিকোয়েস্ট আছে।"""
+        v = await self.fetch_value(
+            "SELECT COUNT(*) FROM movie_requests WHERE status='pending' AND LOWER(TRIM(title))=LOWER(TRIM(?))",
+            (title,),
+        )
+        return int(v or 0)
+
     async def get_user_requests(self, user_id: int, limit: int = 20) -> List[aiosqlite.Row]:
         return await self.fetch_all(
             "SELECT * FROM movie_requests WHERE user_id=? ORDER BY created_at DESC LIMIT ?",
