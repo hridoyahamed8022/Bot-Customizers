@@ -45,17 +45,27 @@ async def _run_web(app) -> web.AppRunner:
 
 
 async def _keep_alive() -> None:
-    """Ping our own /healthz every 4 minutes to prevent Replit idle timeout."""
+    """Ping our own /healthz every 2 minutes to prevent Replit idle timeout.
+    UptimeRobot pings every 5 min from outside; internal ping every 2 min
+    ensures no gap large enough for Replit to sleep the container.
+    """
     await asyncio.sleep(30)
     url = f"http://127.0.0.1:{settings.port}/healthz"
+    fail_count = 0
     while True:
         try:
             async with aiohttp.ClientSession() as session:
                 async with session.get(url, timeout=aiohttp.ClientTimeout(total=10)) as r:
-                    log.debug("keep-alive ping: %s", r.status)
+                    if r.status == 200:
+                        fail_count = 0
+                        log.debug("keep-alive ping: %s", r.status)
+                    else:
+                        fail_count += 1
+                        log.warning("keep-alive ping returned %s (fail #%d)", r.status, fail_count)
         except Exception as e:
-            log.debug("keep-alive ping failed: %s", e)
-        await asyncio.sleep(4 * 60)
+            fail_count += 1
+            log.warning("keep-alive ping failed (fail #%d): %s", fail_count, e)
+        await asyncio.sleep(2 * 60)  # প্রতি ২ মিনিটে ping
 
 
 async def _expire_bans_loop(bot) -> None:
