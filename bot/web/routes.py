@@ -187,7 +187,18 @@ def _js_redirect(url: str) -> web.Response:
 # Public routes
 # ──────────────────────────────────────────────────────────────── #
 async def health(request: web.Request) -> web.Response:
-    return web.json_response({"ok": True, "ts": time.time()})
+    import os
+    uptime_ok = True
+    try:
+        db_ok = (await db.fetch_value("SELECT 1")) == 1
+    except Exception:
+        db_ok = False
+    return web.json_response({
+        "ok": True,
+        "db": db_ok,
+        "ts": time.time(),
+        "service": "Moviex Hub Bot",
+    }, status=200 if (uptime_ok and db_ok) else 503)
 
 
 async def login_get(request: web.Request) -> web.StreamResponse:
