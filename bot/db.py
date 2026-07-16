@@ -200,6 +200,20 @@ CREATE TABLE IF NOT EXISTS ad_tokens (
     used        INTEGER NOT NULL DEFAULT 0
 );
 CREATE INDEX IF NOT EXISTS ad_tokens_expires ON ad_tokens(expires_at);
+
+CREATE TABLE IF NOT EXISTS movie_notifications (
+    id          INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id     INTEGER NOT NULL,
+    movie_title TEXT NOT NULL,
+    request_id  INTEGER,
+    created_at  REAL NOT NULL,
+    last_sent_at REAL,
+    next_send_at REAL NOT NULL,
+    fulfilled   INTEGER NOT NULL DEFAULT 0,
+    send_count  INTEGER NOT NULL DEFAULT 0,
+    max_sends   INTEGER NOT NULL DEFAULT 5
+);
+CREATE INDEX IF NOT EXISTS movie_notif_next ON movie_notifications(next_send_at, fulfilled);
 """
 
 
@@ -1094,6 +1108,60 @@ class Database:
     async def count_ad_tokens_used(self) -> int:
         val = await self.fetch_value(
             "SELECT COUNT(*) FROM ad_tokens WHERE used=1", ()
+        )
+        return int(val or 0)
+
+    # ------------------------------------------------------------------ #
+    # Movie upload notifications (repeating reminders)
+    # ------------------------------------------------------------------ #
+    _NOTIF_INTERVAL = 45 * 60  # ৪৫ মিনিট
+
+    async def create_movie_notification(
+        self, user_id: int, movie_title: str, request_id: Optional[int] = None
+    ) -> int:
+        """আপলোড-সম্পন্ন নোটিফিকেশন তৈরি করো। প্রথম send এখনই হবে।"""
+        now = time.time()
+        assert self._conn is not None
+        async with self._lock:
+            cur = await self._conn.execute(
+                """INSERT INTO movie_notifications
+                   (user_id, movie_title, request_id, created_at, next_send_at, send_count, fulfilled)
+                   VALUES (?,?,?,?,?,0,0)""",
+                (user_id, movie_title, request_id, now, now),
+            )
+            await self._conn.commit()
+            return cur.lastrowid  # type: ignore[return-value]
+
+    async def get_due_notifications(self) -> List[aiosqlite.Row]:
+        """এখন পাঠানোর সময় হয়েছে এমন নোটিফিকেশন ফেরত দাও।"""
+        now = time.time()
+        return await self.fetch_all(
+            """SELECT * FROM movie_notifications
+               WHERE fulfilled=0 AND send_count < max_sends AND next_send_at <= ?
+               ORDER BY next_send_at""",
+            (now,),
+        )
+
+    async def mark_notification_sent(self, notif_id: int) -> None:
+        """send_count বাড়াও এবং পরের send time সেট করো।"""
+        now = time.time()
+        await self.execute(
+            """UPDATE movie_notifications
+               SET last_sent_at=?, next_send_at=?, send_count=send_count+1
+               WHERE id=?""",
+            (now, now + self._NOTIF_INTERVAL, notif_id),
+        )
+
+    async def fulfill_user_notifications(self, user_id: int) -> None:
+        """ইউজার মুভি ডাউনলোড করলে তার সব pending নোটিফিকেশন বন্ধ করো।"""
+        await self.execute(
+            "UPDATE movie_notifications SET fulfilled=1 WHERE user_id=? AND fulfilled=0",
+            (user_id,),
+        )
+
+    async def count_pending_notifications(self) -> int:
+        val = await self.fetch_value(
+            "SELECT COUNT(*) FROM movie_notifications WHERE fulfilled=0 AND send_count < max_sends"
         )
         return int(val or 0)
 

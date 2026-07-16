@@ -119,6 +119,51 @@ async def _startup_broadcast(bot) -> None:
         log.exception("_startup_broadcast error")
 
 
+async def _movie_notification_loop(bot) -> None:
+    """আপলোড-সম্পন্ন রিকোয়েস্টের জন্য বারবার রিমাইন্ডার পাঠাও।"""
+    from aiogram.enums import ParseMode
+    from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup
+    from bot.utils import schedule_delete, MSG_TTL
+    await asyncio.sleep(20)
+    while True:
+        try:
+            due = await db.get_due_notifications()
+            for notif in due:
+                user_id = notif["user_id"]
+                title = notif["movie_title"]
+                count = notif["send_count"] + 1
+                max_s = notif["max_sends"]
+                remaining = max_s - count
+                if remaining > 0:
+                    reminder_txt = f"\n\n⏳ আর <b>{remaining}</b> বার মনে করিয়ে দেওয়া হবে।"
+                else:
+                    reminder_txt = "\n\n✅ এটি শেষ রিমাইন্ডার।"
+                text = (
+                    f"🎬 <b>আপনার রিকোয়েস্ট করা মুভি আপলোড হয়েছে!</b>\n"
+                    f"━━━━━━━━━━━━━━━━━━\n\n"
+                    f"📽️ <b>{title}</b>\n\n"
+                    f"✅ অ্যাডমিন টিম এই মুভিটি বটে যোগ করেছে।\n"
+                    f"এখনই বটে গিয়ে নামটি লিখে সার্চ করুন এবং মুভিটি উপভোগ করুন! 🍿"
+                    f"{reminder_txt}"
+                )
+                kb = InlineKeyboardMarkup(inline_keyboard=[[
+                    InlineKeyboardButton(text="🔍 এখনই সার্চ করুন", callback_data="search:start")
+                ]])
+                try:
+                    msg = await bot.send_message(user_id, text, parse_mode=ParseMode.HTML, reply_markup=kb)
+                    asyncio.create_task(schedule_delete(bot, user_id, msg.message_id, MSG_TTL))
+                    await db.mark_notification_sent(notif["id"])
+                    log.info("Movie notif #%d sent to user %d (send %d/%d)", notif["id"], user_id, count, max_s)
+                except Exception as e:
+                    log.debug("Movie notif send failed for user %d: %s", user_id, e)
+                    # পাঠানো না গেলেও পরেরটা ব্লক না করতে sent বাড়াই
+                    await db.mark_notification_sent(notif["id"])
+                await asyncio.sleep(0.05)
+        except Exception:
+            log.exception("_movie_notification_loop error")
+        await asyncio.sleep(60)  # প্রতি মিনিটে চেক করো
+
+
 async def _maintenance_end_notifier(bot) -> None:
     """মেইনটেন্যান্স সময় শেষ হলে সব ইউজারকে notify করো।"""
     from aiogram.enums import ParseMode
@@ -191,6 +236,7 @@ async def main() -> None:
     expire_bans_task = asyncio.create_task(_expire_bans_loop(bot))
     maint_notifier_task = asyncio.create_task(_maintenance_end_notifier(bot))
     startup_broadcast_task = asyncio.create_task(_startup_broadcast(bot))
+    movie_notif_task = asyncio.create_task(_movie_notification_loop(bot))
     stop_task = asyncio.create_task(stop_event.wait())
 
     try:
@@ -205,6 +251,7 @@ async def main() -> None:
         expire_bans_task.cancel()
         maint_notifier_task.cancel()
         startup_broadcast_task.cancel()
+        movie_notif_task.cancel()
         log.info("Shutting down…")
         try:
             await dp.stop_polling()

@@ -610,7 +610,8 @@ async def requests_resolve(request: web.Request) -> web.Response:
         correct_name = (data.get("correct_name") or "").strip()
 
         if status == "done":
-            # ✅ শুধু রিকোয়েস্টকারীকে জানাও
+            # ✅ প্রথম নোটিফিকেশন + repeating reminder চালু করো
+            asyncio.create_task(db.create_movie_notification(user_id, title, req_id))
             from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup
             search_kb = InlineKeyboardMarkup(inline_keyboard=[[
                 InlineKeyboardButton(
@@ -619,9 +620,12 @@ async def requests_resolve(request: web.Request) -> web.Response:
                 )
             ]])
             text = (
-                f"✅ <b>আপলোড সম্পন্ন!</b>\n\n"
-                f"🎬 <b>{esc(title)}</b> বটে যোগ করা হয়েছে।\n\n"
-                f"এখনই বটে গিয়ে নামটি লিখে সার্চ করুন। 🍿"
+                f"🎬 <b>আপনার রিকোয়েস্ট করা মুভি আপলোড হয়েছে!</b>\n"
+                f"━━━━━━━━━━━━━━━━━━\n\n"
+                f"📽️ <b>{esc(title)}</b>\n\n"
+                f"✅ অ্যাডমিন টিম এই মুভিটি বটে যোগ করেছে।\n"
+                f"এখনই বটে গিয়ে নামটি লিখে সার্চ করুন এবং মুভিটি উপভোগ করুন! 🍿\n\n"
+                f"⏳ আর <b>4</b> বার মনে করিয়ে দেওয়া হবে।"
             )
             asyncio.create_task(_silent_send(bot, user_id, text, search_kb))
 
@@ -689,6 +693,41 @@ async def requests_delete(request: web.Request) -> web.Response:
         asyncio.create_task(_silent_send(bot, user_id, text, home_kb))
 
     return _js_redirect("/requests" + _flash(request, f"রিকোয়েস্ট #{req_id} ডিলিট হয়েছে (নোটিফিকেশন পাঠানো হচ্ছে…)।", "ok"))
+
+
+@require_admin
+async def requests_dm(request: web.Request) -> web.Response:
+    """রিকোয়েস্ট প্যানেল থেকে নির্দিষ্ট ইউজারকে কাস্টম DM পাঠাও।"""
+    bot = request.app["bot"]
+    data = await request.post()
+    try:
+        req_id = int(data.get("req_id", 0))
+        target_user_id = int(data.get("user_id", 0))
+    except (TypeError, ValueError):
+        return _js_redirect("/requests" + _flash(request, "অবৈধ রিকোয়েস্ট।", "err"))
+
+    text = (data.get("text") or "").strip()
+    if not text:
+        return _js_redirect("/requests" + _flash(request, "মেসেজ খালি রাখা যাবে না।", "err"))
+
+    from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup
+    from aiogram.enums import ParseMode
+    search_kb = InlineKeyboardMarkup(inline_keyboard=[[
+        InlineKeyboardButton(text="🔍 সার্চ করুন", callback_data="search:start")
+    ]])
+    from bot.utils import schedule_delete, MSG_TTL
+    try:
+        msg = await bot.send_message(
+            target_user_id,
+            text,
+            parse_mode=ParseMode.HTML,
+            reply_markup=search_kb,
+        )
+        asyncio.create_task(schedule_delete(bot, target_user_id, msg.message_id, MSG_TTL))
+        return _js_redirect("/requests" + _flash(request, f"✅ রিকোয়েস্ট #{req_id} — ইউজারকে মেসেজ পাঠানো হয়েছে।", "ok"))
+    except Exception as e:
+        log.warning("requests_dm failed for user %d: %s", target_user_id, e)
+        return _js_redirect("/requests" + _flash(request, f"❌ মেসেজ পাঠানো যায়নি: {e}", "err"))
 
 
 # ──────────────────────────────────────────────────────────────── #
@@ -1426,6 +1465,7 @@ def setup_routes(app: web.Application) -> None:
     app.router.add_get("/requests", requests_page)
     app.router.add_post("/requests/resolve", requests_resolve)
     app.router.add_post("/requests/delete", requests_delete)
+    app.router.add_post("/requests/dm", requests_dm)
 
     # Bot messages editor
     app.router.add_get("/bot-messages", bot_messages_page)

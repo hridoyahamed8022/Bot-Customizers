@@ -83,6 +83,9 @@ async def deliver_movie(target, movie_id: int) -> None:
             "delivered",
             {"movie_id": movie_id, "user_id": chat_id, "title": movie["title"]},
         )
+        # ইউজার মুভি পেয়েছে — তার সব pending upload notifications বন্ধ করো
+        asyncio.create_task(db.fulfill_user_notifications(chat_id))
+
         if isinstance(target, CallbackQuery):
             await target.answer("✅ পাঠানো হয়েছে", show_alert=False)
 

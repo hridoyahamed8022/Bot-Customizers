@@ -123,33 +123,49 @@
 
 <!-- ───── DM Modal (with image + buttons) ───── -->
 <div id="dmModal" class="modal-overlay" style="display:none">
-  <div class="modal-box" style="max-width:500px;width:95vw">
-    <h3 style="margin:0 0 .3rem">✉️ মেসেজ পাঠান</h3>
-    <p id="dmTarget" class="muted" style="margin:0 0 .8rem;font-size:.9rem"></p>
+  <div class="modal-box" style="max-width:520px;width:96vw">
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:.4rem">
+      <h3 style="margin:0;font-size:1.1rem">✉️ সরাসরি মেসেজ পাঠান</h3>
+      <button type="button" onclick="closeModal('dmModal')" style="background:none;border:none;font-size:1.2rem;cursor:pointer;color:var(--muted,#aaa)">✕</button>
+    </div>
+    <p id="dmTarget" class="muted" style="margin:0 0 .8rem;font-size:.85rem;padding:.4rem .7rem;background:var(--bg,#13131f);border-radius:6px;border-left:3px solid var(--accent,#7c3aed)"></p>
+
+    <!-- Quick Templates -->
+    <div style="margin-bottom:.8rem">
+      <div style="font-size:.78rem;font-weight:600;color:var(--muted,#888);margin-bottom:.35rem">⚡ দ্রুত টেমপ্লেট:</div>
+      <div style="display:flex;gap:.35rem;flex-wrap:wrap">
+        <button type="button" class="qtpl-btn" onclick="setTpl('👋 হ্যালো! আপনার অ্যাকাউন্টে কোনো সমস্যা হচ্ছে কি? জানান, সাহায্য করতে প্রস্তুত। 😊')">👋 হ্যালো</button>
+        <button type="button" class="qtpl-btn" onclick="setTpl('⚠️ <b>সতর্কবার্তা:</b> আপনার অ্যাকাউন্ট থেকে সন্দেহজনক কার্যকলাপ দেখা গেছে। এ ব্যাপারে সতর্ক থাকুন।')">⚠️ সতর্কতা</button>
+        <button type="button" class="qtpl-btn" onclick="setTpl('✅ আপনার রিকোয়েস্ট করা মুভি বটে আপলোড করা হয়েছে!\n\nএখনই বটে গিয়ে নামটি লিখে সার্চ করুন। 🍿')">✅ মুভি আপলোড</button>
+        <button type="button" class="qtpl-btn" onclick="setTpl('🎉 <b>সুখবর!</b> আপনাকে VIP সদস্যপদ দেওয়া হয়েছে।\n\nএখন থেকে বিজ্ঞাপন ছাড়াই সরাসরি মুভি পাবেন! ⭐')">⭐ VIP নোটিশ</button>
+        <button type="button" class="qtpl-btn" onclick="setTpl('🙏 ধন্যবাদ আমাদের বট ব্যবহার করার জন্য!\n\nনতুন মুভি/নাটক যোগ হলে আপনাকে জানানো হবে। 🎬')">🙏 ধন্যবাদ</button>
+      </div>
+    </div>
+
     <form method="post" action="/users/send-dm" enctype="multipart/form-data" id="dmForm">
       <input type="hidden" name="user_id" id="dmUserId">
 
       <label style="display:block;margin-bottom:.7rem">
-        <span style="font-size:.82rem;font-weight:600;display:block;margin-bottom:.3rem">মেসেজ টেক্সট (HTML সাপোর্টেড)</span>
+        <span style="font-size:.82rem;font-weight:600;display:block;margin-bottom:.3rem">📝 মেসেজ টেক্সট <span style="color:var(--muted,#888);font-weight:400">(HTML সাপোর্টেড)</span></span>
         <textarea name="text" id="dmText" rows="4"
           placeholder="মেসেজ লিখুন… যেমন: <b>নতুন মুভি!</b>"
-          style="width:100%;box-sizing:border-box;resize:vertical"></textarea>
+          style="width:100%;box-sizing:border-box;resize:vertical;border-radius:8px;border:1px solid var(--border,#444);background:var(--bg,#13131f);color:inherit;padding:.5rem .75rem;font-size:.9rem"></textarea>
       </label>
 
       <label style="display:block;margin-bottom:.7rem">
-        <span style="font-size:.82rem;font-weight:600;display:block;margin-bottom:.3rem">📷 ছবি সংযুক্ত করুন (ঐচ্ছিক)</span>
+        <span style="font-size:.82rem;font-weight:600;display:block;margin-bottom:.3rem">📷 ছবি সংযুক্ত করুন <span style="color:var(--muted,#888);font-weight:400">(ঐচ্ছিক)</span></span>
         <input type="file" name="photo" accept="image/*" style="width:100%;box-sizing:border-box">
         <span class="muted" style="font-size:.78rem">ছবি থাকলে টেক্সট ক্যাপশন হিসেবে যাবে।</span>
       </label>
 
       <div style="margin-bottom:.7rem">
-        <span style="font-size:.82rem;font-weight:600;display:block;margin-bottom:.3rem">🔗 ইনলাইন বাটন (ঐচ্ছিক)</span>
+        <span style="font-size:.82rem;font-weight:600;display:block;margin-bottom:.3rem">🔗 ইনলাইন বাটন <span style="color:var(--muted,#888);font-weight:400">(ঐচ্ছিক)</span></span>
         <div id="dmButtonRows" style="margin-bottom:.4rem"></div>
         <button type="button" onclick="addDmBtn()" class="btn ghost" style="font-size:.8rem;padding:.25rem .6rem">➕ বাটন যোগ করুন</button>
         <textarea name="buttons" id="dmButtonsHidden" style="display:none"></textarea>
       </div>
 
-      <div style="display:flex;gap:.5rem;justify-content:flex-end">
+      <div style="display:flex;gap:.5rem;justify-content:flex-end;border-top:1px solid var(--border,#333);padding-top:.8rem;margin-top:.3rem">
         <button type="button" onclick="closeModal('dmModal')" class="btn ghost">বাতিল</button>
         <button type="submit" class="btn primary" onclick="serializeDmButtons()">📤 পাঠান</button>
       </div>
@@ -206,7 +222,9 @@
 .table th{font-size:.8rem;text-transform:uppercase;letter-spacing:.04em;color:var(--muted,#888)}
 .btn.ok{background:#1a4a2e;color:#4ade80;border:1px solid #2d7a4a}
 .modal-overlay{position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:999;display:flex;align-items:center;justify-content:center}
-.modal-box{background:var(--bg,#1e1e2e);border:1px solid var(--border,#333);border-radius:10px;padding:1.5rem;width:min(440px,95vw);box-shadow:0 8px 32px rgba(0,0,0,.4)}
+.modal-box{background:var(--bg-card,#1e1e2e);border:1px solid var(--border,#333);border-radius:12px;padding:1.5rem;width:min(520px,96vw);box-shadow:0 12px 40px rgba(0,0,0,.5);max-height:90vh;overflow-y:auto}
+.qtpl-btn{font-size:.76rem;padding:.22rem .5rem;border-radius:6px;background:var(--bg,#13131f);border:1px solid var(--border,#444);color:var(--muted,#aaa);cursor:pointer;white-space:nowrap}
+.qtpl-btn:hover{border-color:#7c3aed;color:#c4b5fd}
 .dur-btn.selected{background:#3b3b5c;border-color:#a78bfa;color:#a78bfa}
 .dm-btn-row{display:flex;gap:.4rem;align-items:center;margin-bottom:.4rem}
 .dm-btn-row input{flex:1;min-width:80px}
@@ -241,6 +259,11 @@ function serializeDmButtons() {
 }
 
 function esc(s){ return (s||'').replace(/&/g,'&amp;').replace(/"/g,'&quot;'); }
+
+function setTpl(txt) {
+  document.getElementById('dmText').value = txt;
+  document.getElementById('dmText').focus();
+}
 
 function openDm(uid, name){
   document.getElementById('dmUserId').value = uid;

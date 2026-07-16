@@ -1,118 +1,234 @@
 {% extends "base.html" %}
 {% block title %}মুভি রিকোয়েস্ট{% endblock %}
 {% block content %}
-<div style="display:flex;align-items:center;gap:1rem;margin-bottom:1rem;">
-  <h1 style="margin:0">মুভি রিকোয়েস্ট</h1>
+
+<style>
+.req-header{display:flex;align-items:center;gap:.75rem;margin-bottom:1.2rem;flex-wrap:wrap}
+.req-header h1{margin:0;font-size:1.4rem}
+.badge-count{background:var(--accent,#7c3aed);color:#fff;padding:.2rem .65rem;border-radius:999px;font-size:.82rem;font-weight:700}
+.filter-bar{display:flex;gap:.5rem;flex-wrap:wrap;margin-bottom:1.2rem;align-items:center}
+.filter-bar select{padding:.4rem .7rem;border-radius:8px;border:1px solid var(--border,#333);background:var(--bg-card,#1e1e2e);color:inherit;font-size:.9rem;min-width:140px}
+.req-grid{display:flex;flex-direction:column;gap:.75rem}
+.req-card{background:var(--bg-card,#1e1e2e);border:1px solid var(--border,#333);border-radius:12px;padding:1rem 1.2rem;display:flex;flex-direction:column;gap:.6rem}
+.req-card.status-pending{border-left:3px solid #facc15}
+.req-card.status-done{border-left:3px solid #4ade80}
+.req-card.status-rejected{border-left:3px solid #f87171}
+.req-top{display:flex;align-items:flex-start;justify-content:space-between;gap:.5rem;flex-wrap:wrap}
+.req-title{font-size:1.05rem;font-weight:700;color:var(--fg,#e2e8f0)}
+.req-meta{display:flex;gap:.8rem;flex-wrap:wrap;font-size:.8rem;color:var(--muted,#888)}
+.req-meta span{display:flex;align-items:center;gap:.25rem}
+.req-user{display:flex;align-items:center;gap:.5rem;font-size:.85rem}
+.req-user a{color:var(--accent,#7c3aed);text-decoration:none;font-weight:600}
+.req-user a:hover{text-decoration:underline}
+.req-actions{display:flex;gap:.4rem;flex-wrap:wrap;align-items:center;margin-top:.2rem}
+.req-actions .btn{font-size:.8rem;padding:.3rem .65rem;border-radius:7px;cursor:pointer;border:1px solid transparent;white-space:nowrap}
+.btn-success{background:#14532d;color:#4ade80;border-color:#166534}
+.btn-success:hover{background:#166534}
+.btn-reject{background:#4a1a1a;color:#fca5a5;border-color:#7f1d1d}
+.btn-reject:hover{background:#7f1d1d}
+.btn-delete{background:#3b1111;color:#f87171;border-color:#7f1d1d}
+.btn-delete:hover{background:#5a1a1a}
+.btn-dm{background:#1e1a4a;color:#a78bfa;border-color:#4c1d95}
+.btn-dm:hover{background:#2d1f6e}
+.status-chip{font-size:.78rem;font-weight:600;padding:.2rem .55rem;border-radius:6px;white-space:nowrap}
+.chip-pending{background:#422006;color:#fde68a}
+.chip-done{background:#14532d;color:#86efac}
+.chip-rejected{background:#4a1a1a;color:#fca5a5}
+.note-box{background:var(--bg,#13131f);border-radius:6px;padding:.4rem .7rem;font-size:.82rem;color:var(--muted,#aaa);border-left:3px solid var(--border,#444)}
+/* DM Modal */
+.modal-overlay{position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:9999;display:flex;align-items:center;justify-content:center}
+.modal-box{background:var(--bg-card,#1e1e2e);border:1px solid var(--border,#333);border-radius:14px;padding:1.5rem;width:min(500px,94vw);box-shadow:0 12px 40px rgba(0,0,0,.5)}
+.modal-box h3{margin:0 0 .3rem;font-size:1.1rem}
+.quick-btns{display:flex;gap:.4rem;flex-wrap:wrap;margin-bottom:.7rem}
+.quick-btn{font-size:.78rem;padding:.25rem .55rem;border-radius:6px;background:var(--bg,#13131f);border:1px solid var(--border,#444);color:var(--muted,#aaa);cursor:pointer}
+.quick-btn:hover{border-color:#7c3aed;color:#c4b5fd}
+</style>
+
+<div class="req-header">
+  <h1>🎬 মুভি রিকোয়েস্ট</h1>
   {% if pending_count > 0 %}
-  <span class="badge" style="background:var(--accent);color:#fff;padding:.25rem .6rem;border-radius:999px;font-size:.85rem;">{{ pending_count }} নতুন</span>
+  <span class="badge-count">{{ pending_count }} নতুন</span>
   {% endif %}
 </div>
 
-<div class="search-bar" style="gap:.5rem;flex-wrap:wrap;margin-bottom:1rem;">
-  <form method="get" style="display:flex;gap:.5rem;flex:1">
-    <select name="status" onchange="this.form.submit()" style="min-width:130px">
-      <option value="all" {% if status_filter=='all' %}selected{% endif %}>সব</option>
-      <option value="pending" {% if status_filter=='pending' %}selected{% endif %}>অপেক্ষমাণ</option>
-      <option value="done" {% if status_filter=='done' %}selected{% endif %}>সম্পন্ন</option>
-      <option value="rejected" {% if status_filter=='rejected' %}selected{% endif %}>বাতিল</option>
+<div class="filter-bar">
+  <form method="get" style="display:flex;gap:.5rem;align-items:center">
+    <select name="status" onchange="this.form.submit()">
+      <option value="all" {% if status_filter=='all' %}selected{% endif %}>📋 সব রিকোয়েস্ট</option>
+      <option value="pending" {% if status_filter=='pending' %}selected{% endif %}>⏳ অপেক্ষমাণ</option>
+      <option value="done" {% if status_filter=='done' %}selected{% endif %}>✅ সম্পন্ন</option>
+      <option value="rejected" {% if status_filter=='rejected' %}selected{% endif %}>❌ বাতিল</option>
     </select>
   </form>
+  <span class="muted" style="font-size:.82rem">মোট {{ requests|length }} টি রেকর্ড</span>
 </div>
 
-{% if requests %}
-<table class="data-table">
-  <thead>
-    <tr>
-      <th>#</th><th>ইউজার</th><th>মুভির নাম</th><th>নোট</th><th>তারিখ</th><th>স্ট্যাটাস</th><th>অ্যাকশন</th>
-    </tr>
-  </thead>
-  <tbody>
-    {% for r in requests %}
-    <tr>
-      <td><code>{{ r.id }}</code></td>
-      <td>
-        {% if r.first_name %}{{ r.first_name }}{% endif %}
-        {% if r.username %}<br><span class="muted">@{{ r.username }}</span>{% endif %}
-        <br><code style="font-size:.75rem">{{ r.user_id }}</code>
-      </td>
-      <td><strong>{{ r.title }}</strong></td>
-      <td><span class="muted">{{ r.note or '—' }}</span></td>
-      <td><span class="muted">{{ r.created_at | fmtdate }}</span></td>
-      <td>
-        {% if r.status == 'pending' %}
-        <span style="color:var(--accent-warn)">⏳ অপেক্ষমাণ</span>
-        {% elif r.status == 'done' %}
-        <span style="color:var(--accent-ok)">✅ সম্পন্ন</span>
-        {% else %}
-        <span style="color:var(--accent-err)">❌ বাতিল</span>
-        {% endif %}
-      </td>
-      <td style="display:flex;gap:.4rem;flex-wrap:wrap">
-        {% if r.status != 'done' %}
-        <form method="post" action="/requests/resolve">
-          <input type="hidden" name="id" value="{{ r.id }}">
-          <input type="hidden" name="status" value="done">
-          <button class="btn primary" type="submit" title="আপলোড সম্পন্ন — ইউজারকে জানাও" style="font-size:.8rem;padding:.25rem .5rem">✅</button>
-        </form>
-        {% endif %}
-        {% if r.status != 'rejected' %}
-        <button class="btn ghost" type="button" title="বানান ভুল — সঠিক নাম পাঠাও"
-          onclick="openRejectModal({{ r.id }}, '{{ r.title | replace("'", "\\'") }}')"
-          style="font-size:.8rem;padding:.25rem .5rem">❌</button>
-        {% endif %}
-        <form method="post" action="/requests/delete" onsubmit="return confirm('ডিলিট করবেন? ইউজারকে জানানো হবে।');">
-          <input type="hidden" name="id" value="{{ r.id }}">
-          <button class="btn danger" type="submit" title="মুভি নেই — ইউজারকে জানাও" style="font-size:.8rem;padding:.25rem .5rem">🗑</button>
-        </form>
-      </td>
-    </tr>
-    {% endfor %}
-  </tbody>
-</table>
-{% else %}
-<div class="hint">কোনো রিকোয়েস্ট নেই।</div>
-{% endif %}
-
 {% if flash %}
-<div class="flash flash-{{ flash.kind }}" style="margin-top:1rem">{{ flash.msg }}</div>
+<div class="flash flash-{{ flash.kind }}" style="margin-bottom:1rem">{{ flash.msg }}</div>
 {% endif %}
 
-<!-- Reject Modal -->
-<div id="rejectModal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:9999;align-items:center;justify-content:center;">
-  <div style="background:var(--bg-card,#1e1e2e);border:1px solid var(--border,#333);border-radius:12px;padding:1.5rem;max-width:420px;width:90%;box-shadow:0 8px 32px rgba(0,0,0,.5);">
-    <h3 style="margin:0 0 .5rem">❌ বানান ভুল</h3>
-    <p style="color:var(--muted,#aaa);font-size:.9rem;margin:0 0 1rem">
+{% if requests %}
+<div class="req-grid">
+  {% for r in requests %}
+  <div class="req-card status-{{ r.status }}">
+    <div class="req-top">
+      <div>
+        <div class="req-title">🎬 {{ r.title }}</div>
+        <div class="req-meta" style="margin-top:.3rem">
+          <span>📅 {{ r.created_at | fmtdate }}</span>
+          {% if r.vote_count and r.vote_count > 0 %}
+          <span>👍 {{ r.vote_count }} ভোট</span>
+          {% endif %}
+          <span>🆔 #{{ r.id }}</span>
+        </div>
+      </div>
+      <span class="status-chip chip-{{ r.status }}">
+        {% if r.status == 'pending' %}⏳ অপেক্ষমাণ
+        {% elif r.status == 'done' %}✅ সম্পন্ন
+        {% else %}❌ বাতিল{% endif %}
+      </span>
+    </div>
+
+    <div class="req-user">
+      <span>👤</span>
+      <strong>{{ r.first_name or 'অজানা' }}</strong>
+      {% if r.username %}
+      <a href="https://t.me/{{ r.username }}" target="_blank" rel="noopener">@{{ r.username }}</a>
+      {% endif %}
+      <code style="font-size:.75rem;color:var(--muted,#888)">#{{ r.user_id }}</code>
+    </div>
+
+    {% if r.note %}
+    <div class="note-box">📝 {{ r.note }}</div>
+    {% endif %}
+
+    <div class="req-actions">
+      {% if r.status != 'done' %}
+      <form method="post" action="/requests/resolve" style="margin:0">
+        <input type="hidden" name="id" value="{{ r.id }}">
+        <input type="hidden" name="status" value="done">
+        <button class="btn btn-success" type="submit" title="আপলোড সম্পন্ন — ইউজারকে রিমাইন্ডার দাও">✅ আপলোড হয়েছে</button>
+      </form>
+      {% endif %}
+
+      {% if r.status != 'rejected' %}
+      <button class="btn btn-reject" type="button" title="বানান ভুল — সঠিক নাম পাঠাও"
+        onclick="openRejectModal({{ r.id }}, '{{ r.title | replace("'", "\\'") }}')">❌ বানান ভুল</button>
+      {% endif %}
+
+      <button class="btn btn-dm" type="button"
+        onclick="openDmModal({{ r.id }}, {{ r.user_id }}, '{{ r.first_name | default('') | replace("'", "\\'") }}', '{{ r.title | replace("'", "\\'") }}')">
+        ✉️ DM পাঠান
+      </button>
+
+      <form method="post" action="/requests/delete" style="margin:0"
+        onsubmit="return confirm('রিকোয়েস্ট ডিলিট করবেন? ইউজারকে জানানো হবে।')">
+        <input type="hidden" name="id" value="{{ r.id }}">
+        <button class="btn btn-delete" type="submit" title="মুভি নেই — ডিলিট করো">🗑 ডিলিট</button>
+      </form>
+    </div>
+  </div>
+  {% endfor %}
+</div>
+{% else %}
+<div class="hint" style="text-align:center;padding:3rem 1rem;color:var(--muted,#888)">
+  🎬 কোনো রিকোয়েস্ট নেই।
+</div>
+{% endif %}
+
+
+<!-- ───── Reject Modal ───── -->
+<div id="rejectModal" class="modal-overlay" style="display:none">
+  <div class="modal-box">
+    <h3>❌ বানান ভুল সংশোধন</h3>
+    <p style="color:var(--muted,#aaa);font-size:.88rem;margin:.3rem 0 1rem">
       রিকোয়েস্ট: <strong id="rejectTitle"></strong><br>
-      ইউজারকে মুভির সঠিক নামটি জানান যাতে সে সার্চ করতে পারে।
+      সঠিক নামটি জানালে ইউজার সরাসরি সার্চ করতে পারবে।
     </p>
     <form method="post" action="/requests/resolve" id="rejectForm">
       <input type="hidden" name="id" id="rejectId">
       <input type="hidden" name="status" value="rejected">
-      <label style="display:block;font-size:.85rem;margin-bottom:.4rem;color:var(--muted,#aaa)">মুভির সঠিক নাম (ইংরেজিতে):</label>
-      <input type="text" name="correct_name" id="correctNameInput" placeholder="যেমন: Interstellar, KGF Chapter 2"
-        style="width:100%;padding:.5rem .75rem;border-radius:8px;border:1px solid var(--border,#444);background:var(--bg,#13131f);color:inherit;font-size:.95rem;box-sizing:border-box;margin-bottom:1rem;">
-      <div style="display:flex;gap:.5rem;justify-content:flex-end;">
-        <button type="button" onclick="closeRejectModal()" class="btn ghost" style="font-size:.85rem">বাতিল</button>
+      <label style="display:block;font-size:.83rem;margin-bottom:.4rem;color:var(--muted,#aaa)">সঠিক নাম (ইংরেজিতে):</label>
+      <input type="text" name="correct_name" id="correctNameInput"
+        placeholder="যেমন: Interstellar, KGF Chapter 2"
+        style="width:100%;padding:.5rem .75rem;border-radius:8px;border:1px solid var(--border,#444);background:var(--bg,#13131f);color:inherit;font-size:.95rem;box-sizing:border-box;margin-bottom:1rem">
+      <div style="display:flex;gap:.5rem;justify-content:flex-end">
+        <button type="button" onclick="closeModal('rejectModal')" class="btn ghost" style="font-size:.85rem">বাতিল</button>
         <button type="submit" class="btn primary" style="font-size:.85rem">📨 পাঠাও</button>
       </div>
     </form>
   </div>
 </div>
 
+
+<!-- ───── DM Modal ───── -->
+<div id="dmModal" class="modal-overlay" style="display:none">
+  <div class="modal-box">
+    <h3>✉️ ইউজারকে মেসেজ পাঠান</h3>
+    <p id="dmInfo" style="color:var(--muted,#aaa);font-size:.85rem;margin:.3rem 0 .8rem"></p>
+
+    <div class="quick-btns">
+      <span style="font-size:.78rem;color:var(--muted,#888);align-self:center">দ্রুত:</span>
+      <button type="button" class="quick-btn" onclick="setDmText('🎬 <b>{title}</b> মুভিটি বটে আপলোড করা হয়েছে।\n\nএখনই বটে গিয়ে নামটি লিখে সার্চ করুন এবং উপভোগ করুন! 🍿')">✅ আপলোড সম্পন্ন</button>
+      <button type="button" class="quick-btn" onclick="setDmText('⏳ আপনার রিকোয়েস্ট করা <b>{title}</b> মুভিটি আমরা সংগ্রহ করছি।\n\nশীঘ্রই আপলোড করা হবে, একটু অপেক্ষা করুন। 🙏')">🔄 প্রক্রিয়াধীন</button>
+      <button type="button" class="quick-btn" onclick="setDmText('❌ দুঃখিত, <b>{title}</b> মুভিটি এই মুহূর্তে আমাদের কাছে নেই।\n\nঅন্য কোনো মুভি খুঁজুন বা পরে আবার চেষ্টা করুন। 🙏')">❌ পাওয়া যায়নি</button>
+      <button type="button" class="quick-btn" onclick="setDmText('👋 হ্যালো!\n\n<b>{title}</b> সম্পর্কে আপনার রিকোয়েস্টটি পেয়েছি। আমরা কাজ করছি। 😊')">💬 কাস্টম</button>
+    </div>
+
+    <form method="post" action="/requests/dm" id="dmForm">
+      <input type="hidden" name="req_id" id="dmReqId">
+      <input type="hidden" name="user_id" id="dmUserId">
+
+      <label style="display:block;font-size:.83rem;font-weight:600;margin-bottom:.3rem">মেসেজ (HTML সাপোর্টেড):</label>
+      <textarea name="text" id="dmText" rows="5"
+        placeholder="মেসেজ লিখুন… যেমন: <b>মুভি আপলোড হয়েছে!</b>"
+        style="width:100%;box-sizing:border-box;padding:.5rem .75rem;border-radius:8px;border:1px solid var(--border,#444);background:var(--bg,#13131f);color:inherit;resize:vertical;font-size:.9rem;margin-bottom:1rem"></textarea>
+
+      <div style="display:flex;gap:.5rem;justify-content:flex-end">
+        <button type="button" onclick="closeModal('dmModal')" class="btn ghost" style="font-size:.85rem">বাতিল</button>
+        <button type="submit" class="btn primary" style="font-size:.85rem">📤 পাঠান</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+
 <script>
+let _dmTitle = '';
+
 function openRejectModal(id, title) {
   document.getElementById('rejectId').value = id;
   document.getElementById('rejectTitle').textContent = title;
   document.getElementById('correctNameInput').value = '';
-  var modal = document.getElementById('rejectModal');
-  modal.style.display = 'flex';
-  setTimeout(function(){ document.getElementById('correctNameInput').focus(); }, 100);
+  showModal('rejectModal');
+  setTimeout(() => document.getElementById('correctNameInput').focus(), 80);
 }
-function closeRejectModal() {
-  document.getElementById('rejectModal').style.display = 'none';
+
+function openDmModal(reqId, userId, name, title) {
+  _dmTitle = title;
+  document.getElementById('dmReqId').value = reqId;
+  document.getElementById('dmUserId').value = userId;
+  document.getElementById('dmInfo').textContent =
+    'প্রাপক: ' + (name || 'ইউজার') + ' (#' + userId + ')  •  মুভি: ' + title;
+  document.getElementById('dmText').value = '';
+  showModal('dmModal');
+  setTimeout(() => document.getElementById('dmText').focus(), 80);
 }
-document.getElementById('rejectModal').addEventListener('click', function(e) {
-  if (e.target === this) closeRejectModal();
+
+function setDmText(tpl) {
+  document.getElementById('dmText').value = tpl.replace(/\{title\}/g, _dmTitle);
+  document.getElementById('dmText').focus();
+}
+
+function showModal(id) { document.getElementById(id).style.display = 'flex'; }
+function closeModal(id) { document.getElementById(id).style.display = 'none'; }
+
+document.querySelectorAll('.modal-overlay').forEach(m =>
+  m.addEventListener('click', e => { if (e.target === m) m.style.display = 'none'; })
+);
+document.addEventListener('keydown', e => {
+  if (e.key === 'Escape')
+    document.querySelectorAll('.modal-overlay').forEach(m => m.style.display = 'none');
 });
 </script>
 {% endblock %}
