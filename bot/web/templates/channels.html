@@ -20,7 +20,7 @@
     {% for c in channels %}
     <tr>
       <td>
-        {% if c.type == 'group' %}🗣 গ্রুপ{% elif c.type == 'backup' %}🔔 ব্যাকআপ{% else %}📢 চ্যানেল{% endif %}
+        {% if c.type == 'group' %}🗣 গ্রুপ{% elif c.type == 'backup' %}🔔 ব্যাকআপ{% elif c.type == 'verify' %}✅ ভেরিফিকেশন{% else %}📢 চ্যানেল{% endif %}
       </td>
       <td><code>{{ c.chat_id }}</code></td>
       <td>{{ c.title or '—' }}</td>
@@ -68,8 +68,9 @@
         <option value="channel">📢 চ্যানেল</option>
         <option value="group">🗣 গ্রুপ</option>
         <option value="backup">🔔 ব্যাকআপ / আপডেট চ্যানেল</option>
+        <option value="verify">✅ ভেরিফিকেশন চ্যানেল</option>
       </select>
-      <small>ব্যাকআপ চ্যানেলে নতুন মুভি যোগ হলে স্বয়ংক্রিয় নোটিফিকেশন যাবে।</small>
+      <small>ব্যাকআপ চ্যানেলে নতুন মুভির নোটিফিকেশন যাবে। ভেরিফিকেশন চ্যানেলে ইউজারকে আগে জয়েন করতে হবে।</small>
     </label>
     <div class="actions">
       <button type="submit" class="btn primary">➕ যোগ করুন</button>

@@ -95,7 +95,13 @@ async def _check_membership(bot, user_id: int) -> tuple[bool, list]:
     for ch in await _verify_channels():
         try:
             member = await bot.get_chat_member(ch["chat_id"], user_id)
-            if member.status in ("left", "kicked"):
+            status = getattr(member.status, "value", member.status)
+            # Telegram can return `restricted` for a user who is not
+            # actually a member.  Treat that case as pending as well.
+            restricted_not_member = (
+                status == "restricted" and getattr(member, "is_member", True) is False
+            )
+            if status in ("left", "kicked") or restricted_not_member:
                 pending.append(ch)
         except Exception:
             pending.append(ch)

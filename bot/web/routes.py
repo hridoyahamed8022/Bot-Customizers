@@ -853,7 +853,7 @@ async def channels_add(request: web.Request) -> web.Response:
     username = (data.get("username") or "").strip().lstrip("@") or None
     invite = (data.get("invite_url") or "").strip() or None
     ch_type = (data.get("type") or "channel").strip()
-    if ch_type not in ("channel", "group", "backup"):
+    if ch_type not in ("channel", "group", "backup", "verify"):
         ch_type = "channel"
 
     try:
@@ -876,7 +876,21 @@ async def channels_add(request: web.Request) -> web.Response:
     except Exception:
         pass
 
+    if ch_type == "verify" and not (invite or username):
+        return _js_redirect(
+            "/channels"
+            + _flash(
+                request,
+                "ভেরিফিকেশন চ্যানেলের জন্য একটি পাবলিক ইউজারনেম বা ইনভাইট লিংক দিতে হবে।",
+                "err",
+            )
+        )
+
     await db.add_channel(chat_id, title=title, username=username, invite_url=invite, type=ch_type)
+    if ch_type == "verify":
+        await db.add_force_join(
+            chat_id, title=title, username=username, invite_url=invite
+        )
     await db.log_event("channel_add", {"chat_id": chat_id, "type": ch_type, "by": request["user_id"]})
     return _js_redirect("/channels" + _flash(request, f"✅ চ্যানেল/গ্রুপ যোগ হয়েছে: {title or chat_id}", "ok"))
 
@@ -888,7 +902,11 @@ async def channels_del(request: web.Request) -> web.Response:
         chat_id = int(data.get("chat_id"))
     except (TypeError, ValueError):
         return _js_redirect("/channels")
+    channel = await db.fetch_one("SELECT type FROM channels WHERE chat_id=?", (chat_id,))
     await db.remove_channel(chat_id)
+    if channel and channel["type"] == "verify":
+        await db.remove_force_join(chat_id)
+    await db.log_event("channel_delete", {"chat_id": chat_id, "by": request["user_id"]})
     return _js_redirect("/channels" + _flash(request, "চ্যানেল/গ্রুপ সরানো হয়েছে।", "ok"))
 
 
@@ -1321,7 +1339,17 @@ async def settings_fj_add(request: web.Request) -> web.Response:
                 pass
     except Exception:
         pass
+    if not (invite or username):
+        return _js_redirect(
+            "/settings"
+            + _flash(
+                request,
+                "ভেরিফিকেশন চ্যানেলের জন্য একটি পাবলিক ইউজারনেম বা ইনভাইট লিংক দিতে হবে।",
+                "err",
+            )
+        )
     await db.add_force_join(chat_id, title=title, username=username, invite_url=invite)
+    await db.log_event("force_join_add", {"chat_id": chat_id, "by": request["user_id"]})
     return _js_redirect("/settings" + _flash(request, "✅ ভেরিফিকেশন চ্যানেল যোগ হয়েছে।", "ok"))
 
 
@@ -1333,6 +1361,11 @@ async def settings_fj_del(request: web.Request) -> web.Response:
     except (TypeError, ValueError):
         return _js_redirect("/settings")
     await db.remove_force_join(chat_id)
+    await db.execute(
+        "UPDATE channels SET type='channel' WHERE chat_id=? AND type='verify'",
+        (chat_id,),
+    )
+    await db.log_event("force_join_delete", {"chat_id": chat_id, "by": request["user_id"]})
     return _js_redirect("/settings" + _flash(request, "সরানো হয়েছে।", "ok"))
 
 
