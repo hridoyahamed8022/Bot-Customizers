@@ -40,6 +40,24 @@
   </section>
 
   <section class="card-block" style="margin-bottom:1.5rem">
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:.8rem">
+      <label style="display:block">
+        <span style="font-weight:600;display:block;margin-bottom:.35rem">📂 ক্যাটাগরি</span>
+        <input type="text" name="category" value="{{ movie.category or 'মুভি' }}"
+          placeholder="মুভি / সিরিজ / নাটক"
+          style="width:100%;box-sizing:border-box;font-size:.95rem;padding:.5rem .7rem;background:var(--panel-2);border:1px solid var(--border);color:var(--text);border-radius:6px">
+      </label>
+      <label style="display:block">
+        <span style="font-weight:600;display:block;margin-bottom:.35rem">🖼️ পোস্টার URL</span>
+        <input type="url" name="poster_url" value="{{ movie.poster_url or '' }}"
+          placeholder="https://.../poster.jpg"
+          style="width:100%;box-sizing:border-box;font-size:.95rem;padding:.5rem .7rem;background:var(--panel-2);border:1px solid var(--border);color:var(--text);border-radius:6px">
+      </label>
+    </div>
+    <p class="muted" style="font-size:.78rem;margin-top:.5rem">Poster URL না দিলে Mini App নিজে একটি সুন্দর fallback cover দেখাবে।</p>
+  </section>
+
+  <section class="card-block" style="margin-bottom:1.5rem">
     <label style="display:block;margin-bottom:.6rem">
       <span style="font-weight:600;display:block;margin-bottom:.35rem">📝 ক্যাপশন (Caption) <span class="muted" style="font-weight:400">(ঐচ্ছিক)</span></span>
       <textarea name="caption" rows="6"

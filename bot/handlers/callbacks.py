@@ -174,7 +174,7 @@ async def send_ad_link(callback: CallbackQuery, movie_id: int) -> None:
     wait_secs = max(5, int(await db.get_setting("ad_wait_seconds", "20") or 20))
 
     public_url = cfg.public_url
-    token = await db.create_ad_token(movie_id, callback.from_user.id)
+    token = await db.create_ad_token(movie_id, callback.from_user.id, wait_secs)
     raw_url = f"{public_url}/ad/{token}"
     ad_url = await shorten_url(raw_url)
 

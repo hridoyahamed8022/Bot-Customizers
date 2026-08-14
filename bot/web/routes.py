@@ -2,11 +2,14 @@
 from __future__ import annotations
 
 import asyncio
+import hashlib
+import hmac
 import json
 import logging
 import time
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
+from urllib.parse import parse_qsl
 
 import aiohttp_jinja2
 from aiogram.exceptions import TelegramBadRequest, TelegramForbiddenError, TelegramRetryAfter
@@ -20,6 +23,7 @@ from aiohttp import web
 from ..config import settings
 from ..db import db
 from ..utils import esc, schedule_delete, MSG_TTL
+from ..utils_ouo import shorten_url
 from .auth import (
     check_credentials,
     clear_session_cookie,
@@ -30,6 +34,7 @@ from .auth import (
 log = logging.getLogger(__name__)
 
 _STATIC_DIR = Path(__file__).parent / "static"
+_MINIAPP_DIR = _STATIC_DIR / "miniapp"
 
 
 # ──────────────────────────────────────────────────────────────── #
@@ -343,11 +348,120 @@ async def movie_edit_save(request: web.Request) -> web.Response:
         return _js_redirect("/movies")
     title = (data.get("title") or "").strip()
     caption = (data.get("caption") or "").strip()
+    category = (data.get("category") or "মুভি").strip()
+    poster_url = (data.get("poster_url") or "").strip()
     if not title:
         return _js_redirect(f"/movies/edit?id={mid}" + _flash(request, "শিরোনাম খালি রাখা যাবে না।", "err"))
-    await db.update_movie(mid, title, caption)
+    await db.update_movie(mid, title, caption, category, poster_url)
     await db.log_event("movie_edit", {"id": mid, "title": title, "by": request["user_id"]})
     return _js_redirect("/movies" + _flash(request, f"✅ মুভি আপডেট হয়েছে: {title}", "ok"))
+
+
+# ──────────────────────────────────────────────────────────────── #
+# Telegram Mini App
+# ──────────────────────────────────────────────────────────────── #
+def _miniapp_user_id(request: web.Request) -> Optional[int]:
+    """Validate Telegram WebApp initData and return its user id."""
+    raw = request.headers.get("X-Telegram-Init-Data", "").strip()
+    if not raw:
+        return None
+    try:
+        values = dict(parse_qsl(raw, keep_blank_values=True))
+        received_hash = values.pop("hash", "")
+        auth_date = int(values.get("auth_date", "0"))
+        if not received_hash or not auth_date or time.time() - auth_date > 86400:
+            return None
+        check_string = "\n".join(f"{key}={values[key]}" for key in sorted(values))
+        secret_key = hmac.new(
+            b"WebAppData", settings.bot_token.encode(), hashlib.sha256
+        ).digest()
+        expected_hash = hmac.new(
+            secret_key, check_string.encode(), hashlib.sha256
+        ).hexdigest()
+        if not hmac.compare_digest(received_hash, expected_hash):
+            return None
+        user = json.loads(values.get("user", "{}"))
+        user_id = int(user.get("id", 0))
+        return user_id or None
+    except (TypeError, ValueError, json.JSONDecodeError):
+        return None
+
+
+async def miniapp_page(request: web.Request) -> web.FileResponse:
+    return web.FileResponse(_MINIAPP_DIR / "index.html")
+
+
+async def miniapp_movies(request: web.Request) -> web.Response:
+    query = (request.query.get("q") or "").strip()
+    category = (request.query.get("category") or "").strip()
+    try:
+        limit = max(1, min(48, int(request.query.get("limit", "48"))))
+        offset = max(0, int(request.query.get("offset", "0")))
+    except ValueError:
+        limit, offset = 48, 0
+
+    rows = await db.search_movies(query, limit=limit, offset=offset) if query else await db.list_movies(limit, offset)
+    if category:
+        rows = [row for row in rows if (row["category"] or "মুভি") == category]
+
+    categories = await db.fetch_all(
+        "SELECT category, COUNT(*) AS count FROM movies GROUP BY category ORDER BY category"
+    )
+    movies = []
+    for row in rows:
+        movies.append(
+            {
+                "id": row["id"],
+                "title": row["title"],
+                "category": row["category"] or "মুভি",
+                "poster_url": row["poster_url"] or "",
+                "caption": row["caption"] or "",
+                "file_type": row["file_type"],
+            }
+        )
+    return web.json_response(
+        {
+            "ok": True,
+            "movies": movies,
+            "categories": [
+                {"name": row["category"] or "মুভি", "count": int(row["count"])}
+                for row in categories
+            ],
+        },
+        headers={"Cache-Control": "no-store"},
+    )
+
+
+async def miniapp_claim(request: web.Request) -> web.Response:
+    user_id = _miniapp_user_id(request)
+    if not user_id:
+        return web.json_response(
+            {"ok": False, "error": "Telegram থেকে Mini App খুলে আবার চেষ্টা করুন।"},
+            status=401,
+        )
+    try:
+        body = await request.json()
+        movie_id = int(body.get("movie_id", 0))
+    except (TypeError, ValueError, json.JSONDecodeError):
+        movie_id = 0
+    movie = await db.get_movie(movie_id)
+    if not movie:
+        return web.json_response({"ok": False, "error": "মুভিটি পাওয়া যায়নি।"}, status=404)
+    if not settings.public_url:
+        return web.json_response({"ok": False, "error": "Mini App URL কনফিগার করা নেই।"}, status=503)
+
+    token = await db.create_ad_token(movie_id, user_id, wait_seconds=10)
+    raw_url = f"{settings.public_url.rstrip('/')}/ad/{token}"
+    ad_url = await shorten_url(raw_url)
+    return web.json_response(
+        {
+            "ok": True,
+            "title": movie["title"],
+            "ad_url": ad_url,
+            "wait_seconds": 10,
+        },
+        headers={"Cache-Control": "no-store"},
+    )
 
 
 # ──────────────────────────────────────────────────────────────── #
@@ -1394,7 +1508,14 @@ async def ad_page(request: web.Request) -> web.Response:
     row = await db.get_ad_token(token)
 
     bot_username = await db.get_setting("bot_username", "Moviex_hub_bot")
-    wait_secs = max(5, int(await db.get_setting("ad_wait_seconds", "30") or 30))
+    stored_wait = row["wait_seconds"] if row and "wait_seconds" in row else None
+    wait_secs = max(
+        5,
+        min(
+            300,
+            int(stored_wait or await db.get_setting("ad_wait_seconds", "30") or 30),
+        ),
+    )
     circumference = round(2 * _math.pi * 56, 2)
 
     if not row:
@@ -1488,6 +1609,10 @@ def setup_routes(app: web.Application) -> None:
     # Friendly alias for uptime monitors; both endpoints are public and
     # intentionally avoid the admin-session middleware's access check.
     app.router.add_get("/uptime", health)
+    app.router.add_get("/miniapp", miniapp_page)
+    app.router.add_get("/miniapp/", miniapp_page)
+    app.router.add_get("/api/miniapp/movies", miniapp_movies)
+    app.router.add_post("/api/miniapp/claim", miniapp_claim)
     app.router.add_get("/login", login_get)
     app.router.add_post("/login", login_post)
     app.router.add_post("/logout", logout)
@@ -1550,3 +1675,5 @@ def setup_routes(app: web.Application) -> None:
 
     if _STATIC_DIR.exists():
         app.router.add_static("/static/", _STATIC_DIR, show_index=False)
+    if (_MINIAPP_DIR / "assets").exists():
+        app.router.add_static("/miniapp/assets/", _MINIAPP_DIR / "assets", show_index=False)

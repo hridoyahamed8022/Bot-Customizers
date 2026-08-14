@@ -1,0 +1,65 @@
+<!doctype html>
+<html lang="bn">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <meta name="theme-color" content="#0b1020" />
+    <link rel="icon" href="data:," />
+    <title>মুভি লাইব্রেরি · Moviex Hub</title>
+    <link rel="stylesheet" href="/miniapp/assets/style.css" />
+  </head>
+  <body>
+    <div class="app-shell">
+      <header class="hero">
+        <div class="brand-row">
+          <div class="brand-mark">M</div>
+          <div>
+            <p class="eyebrow">MOVIEX HUB</p>
+            <h1>আপনার মুভি লাইব্রেরি</h1>
+          </div>
+        </div>
+        <p class="hero-copy">পছন্দের মুভি বেছে নিন, ক্যাটাগরি নির্বাচন করুন, তারপর নিরাপদে ফাইল নিন।</p>
+        <label class="search-box">
+          <span aria-hidden="true">⌕</span>
+          <input id="search" type="search" placeholder="মুভির নাম লিখুন..." autocomplete="off" />
+        </label>
+      </header>
+
+      <main>
+        <section class="section-head">
+          <div>
+            <p class="eyebrow">COLLECTION</p>
+            <h2>সব মুভি</h2>
+          </div>
+          <span id="count" class="count-pill">লোড হচ্ছে...</span>
+        </section>
+        <div id="categories" class="category-row" aria-label="ক্যাটাগরি"></div>
+        <section id="movie-grid" class="movie-grid" aria-live="polite"></section>
+        <div id="empty" class="empty-state hidden">
+          <div class="empty-icon">⌁</div>
+          <h3>কোনো মুভি পাওয়া যায়নি</h3>
+          <p>অন্য নাম বা ক্যাটাগরি দিয়ে আবার চেষ্টা করুন।</p>
+        </div>
+      </main>
+    </div>
+
+    <div id="detail-modal" class="modal hidden" role="dialog" aria-modal="true" aria-labelledby="detail-title">
+      <div class="modal-backdrop" data-close></div>
+      <article class="detail-card">
+        <button class="close-button" type="button" data-close aria-label="বন্ধ করুন">×</button>
+        <div id="detail-poster" class="detail-poster"></div>
+        <div class="detail-content">
+          <span id="detail-category" class="category-label"></span>
+          <h2 id="detail-title"></h2>
+          <p id="detail-caption" class="detail-caption"></p>
+          <button id="claim-button" class="primary-button" type="button">১০ সেকেন্ডের ad link নিন</button>
+          <p id="claim-note" class="claim-note">সময় শেষ হলে আপনাকে স্বয়ংক্রিয়ভাবে বটে ফিরিয়ে দেওয়া হবে।</p>
+        </div>
+      </article>
+    </div>
+
+    <div id="toast" class="toast" role="status"></div>
+    <script src="https://telegram.org/js/telegram-web-app.js"></script>
+    <script src="/miniapp/assets/app.js"></script>
+  </body>
+</html>

@@ -38,6 +38,8 @@ CREATE TABLE IF NOT EXISTS movies (
     size_bytes        INTEGER DEFAULT 0,
     duration          INTEGER DEFAULT 0,
     title             TEXT NOT NULL,
+    category          TEXT NOT NULL DEFAULT 'মুভি',
+    poster_url        TEXT,
     caption           TEXT,
     source_chat_id    INTEGER,
     source_message_id INTEGER,
@@ -197,6 +199,7 @@ CREATE TABLE IF NOT EXISTS ad_tokens (
     user_id     INTEGER NOT NULL,
     created_at  REAL NOT NULL,
     expires_at  REAL NOT NULL,
+    wait_seconds INTEGER NOT NULL DEFAULT 30,
     used        INTEGER NOT NULL DEFAULT 0
 );
 CREATE INDEX IF NOT EXISTS ad_tokens_expires ON ad_tokens(expires_at);
@@ -236,6 +239,9 @@ class Database:
         await self._add_column_if_missing("bans", "expires_at", "REAL")
         await self._add_column_if_missing("movie_requests", "vote_count", "INTEGER NOT NULL DEFAULT 0")
         await self._add_column_if_missing("movie_requests", "notified", "INTEGER NOT NULL DEFAULT 0")
+        await self._add_column_if_missing("movies", "category", "TEXT NOT NULL DEFAULT 'মুভি'")
+        await self._add_column_if_missing("movies", "poster_url", "TEXT")
+        await self._add_column_if_missing("ad_tokens", "wait_seconds", "INTEGER NOT NULL DEFAULT 30")
         await self._conn.commit()
         log.info("SQLite ready at %s", self.path)
 
@@ -507,11 +513,18 @@ class Database:
     async def delete_movie(self, movie_id: int) -> None:
         await self.execute("DELETE FROM movies WHERE id = ?", (movie_id,))
 
-    async def update_movie(self, movie_id: int, title: str, caption: str) -> None:
+    async def update_movie(
+        self,
+        movie_id: int,
+        title: str,
+        caption: str,
+        category: str = "মুভি",
+        poster_url: str = "",
+    ) -> None:
         """মুভির শিরোনাম ও ক্যাপশন আপডেট করে (FTS ট্রিগার স্বয়ংক্রিয়ভাবে আপডেট হয়)।"""
         await self.execute(
-            "UPDATE movies SET title=?, caption=? WHERE id=?",
-            (title.strip(), caption.strip(), movie_id),
+            "UPDATE movies SET title=?, category=?, poster_url=?, caption=? WHERE id=?",
+            (title.strip(), category.strip() or "মুভি", poster_url.strip(), caption.strip(), movie_id),
         )
 
     async def increment_hits(self, movie_id: int) -> None:
@@ -1077,15 +1090,17 @@ class Database:
     # ------------------------------------------------------------------ #
     # Ad Token system
     # ------------------------------------------------------------------ #
-    async def create_ad_token(self, movie_id: int, user_id: int) -> str:
+    async def create_ad_token(
+        self, movie_id: int, user_id: int, wait_seconds: int = 30
+    ) -> str:
         import secrets as _sec
         token = _sec.token_urlsafe(24)
         now = time.time()
         expires = now + 7200
         assert self._conn is not None
         await self._conn.execute(
-            "INSERT INTO ad_tokens(token,movie_id,user_id,created_at,expires_at) VALUES(?,?,?,?,?)",
-            (token, movie_id, user_id, now, expires),
+            "INSERT INTO ad_tokens(token,movie_id,user_id,created_at,expires_at,wait_seconds) VALUES(?,?,?,?,?,?)",
+            (token, movie_id, user_id, now, expires, max(5, min(300, int(wait_seconds)))),
         )
         await self._conn.commit()
         return token

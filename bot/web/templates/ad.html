@@ -213,6 +213,12 @@ body{
       btn.href = tgLink;
       btn.className = 'btn btn-primary';
       btn.textContent = '🎬 মুভি পান → Telegram খুলুন';
+      // Mini App flow: return to the bot automatically after the wait.
+      // Keep the visible button as a fallback for browsers that block
+      // script-driven Telegram deep-link navigation.
+      setTimeout(function(){
+        try { window.location.href = tgLink; } catch(e) {}
+      }, 350);
       return;
     }
     remaining--;

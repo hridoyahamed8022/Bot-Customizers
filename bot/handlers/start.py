@@ -13,9 +13,11 @@ from aiogram.types import (
     InlineKeyboardButton,
     InlineKeyboardMarkup,
     Message,
+    WebAppInfo,
 )
 from aiogram.utils.keyboard import InlineKeyboardBuilder
 
+from ..config import settings
 from ..db import db
 from ..utils import esc, schedule_delete, MSG_TTL
 
@@ -61,6 +63,11 @@ async def get_home_text() -> str:
 
 def home_kb(popular=None) -> InlineKeyboardMarkup:
     kb = InlineKeyboardBuilder()
+    if settings.public_url:
+        kb.button(
+            text="🎬 মুভি লাইব্রেরি",
+            web_app=WebAppInfo(url=f"{settings.public_url.rstrip('/')}/miniapp/"),
+        )
     kb.button(text="🔍 মুভি সার্চ করুন", callback_data="search:start")
     kb.button(text="🎬 মুভি রিকোয়েস্ট করুন", callback_data="req:start")
     kb.button(text="📊 জনপ্রিয় মুভি", callback_data="popular:show")
