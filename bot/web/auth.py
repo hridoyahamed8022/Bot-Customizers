@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import hmac
+import json
 from typing import Optional
 
 from aiohttp import web
@@ -41,7 +42,17 @@ async def auth_middleware(request: web.Request, handler):
 def require_admin(handler):
     async def wrapper(request: web.Request):
         if not request.get("is_admin"):
-            raise web.HTTPFound("/login")
+            # The Replit shared proxy can drop cookies when an aiohttp
+            # HTTP 302 is returned.  A normal 200 response with a browser
+            # redirect keeps the session cookie flow reliable.
+            html = """<!doctype html><html><head><meta charset="utf-8">
+<script>window.location.replace(%s);</script>
+</head><body>লগইন পেজে নেওয়া হচ্ছে...</body></html>""" % json.dumps("/login")
+            return web.Response(
+                text=html,
+                content_type="text/html",
+                headers={"Cache-Control": "no-store"},
+            )
         return await handler(request)
     wrapper.__name__ = handler.__name__
     return wrapper

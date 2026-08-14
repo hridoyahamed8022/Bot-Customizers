@@ -187,18 +187,16 @@ def _js_redirect(url: str) -> web.Response:
 # Public routes
 # ──────────────────────────────────────────────────────────────── #
 async def health(request: web.Request) -> web.Response:
-    import os
-    uptime_ok = True
     try:
         db_ok = (await db.fetch_value("SELECT 1")) == 1
     except Exception:
         db_ok = False
     return web.json_response({
-        "ok": True,
+        "ok": db_ok,
         "db": db_ok,
         "ts": time.time(),
         "service": "Moviex Hub Bot",
-    }, status=200 if (uptime_ok and db_ok) else 503)
+    }, status=200 if db_ok else 503, headers={"Cache-Control": "no-store"})
 
 
 async def login_get(request: web.Request) -> web.StreamResponse:
@@ -1454,6 +1452,9 @@ async def _broadcast_ad_enabled(bot: Any, wait_secs: int) -> None:
 # ──────────────────────────────────────────────────────────────── #
 def setup_routes(app: web.Application) -> None:
     app.router.add_get("/healthz", health)
+    # Friendly alias for uptime monitors; both endpoints are public and
+    # intentionally avoid the admin-session middleware's access check.
+    app.router.add_get("/uptime", health)
     app.router.add_get("/login", login_get)
     app.router.add_post("/login", login_post)
     app.router.add_post("/logout", logout)

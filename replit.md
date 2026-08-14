@@ -33,6 +33,7 @@ A Telegram bot (@Moviex_hub_bot) that lets users search for and receive Bengali/
   - Configurable via admin panel Settings page: `ad_enabled`, `ad_wait_seconds` (5–300s), `bot_username` — stored as normal `settings` k/v rows.
   - The `/ad/{token}` URL sent to users is wrapped through a real ad-monetization shortlink service before sending (`bot/utils_ouo.py::shorten_url`) — primary provider ShrinkMe.io, fallback Ouo.io, final fallback is the raw unshortened link so delivery is never blocked. Keys: `SHRINKME_API_KEY`, `OUO_API_KEY` secrets.
 - **Admin panel redirects use JS (`window.location.replace`), not HTTP 302** — see gotcha below.
+- **UptimeRobot**: monitor the public HTTPS URL at `/healthz` (or `/uptime`) and expect HTTP 200. Do not monitor `/` because it is the admin entry point, and do not rely on a temporary `.replit.dev` URL for production uptime.
 - **Auto broadcast notifications** go out to all users (`db.all_user_ids()`) on three triggers, each fire-and-forget via `asyncio.create_task`:
   1. Bot process startup (`main.py::_startup_broadcast`) — guarded by a `last_startup_broadcast_ts` setting so rapid restarts within 5 minutes don't re-spam users.
   2. Maintenance mode turned ON (`bot/web/routes.py::_broadcast_maintenance`, called from `maintenance_toggle`).
