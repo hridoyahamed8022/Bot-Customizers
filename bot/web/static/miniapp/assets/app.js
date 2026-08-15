@@ -5,152 +5,233 @@
   if (tg) {
     tg.ready();
     tg.expand();
-    if (tg.setHeaderColor) tg.setHeaderColor("#0b1020");
-    if (tg.setBackgroundColor) tg.setBackgroundColor("#080d1b");
+    if (tg.setHeaderColor) tg.setHeaderColor("#0c1728");
+    if (tg.setBackgroundColor) tg.setBackgroundColor("#09111f");
   }
 
-  const state = { movies: [], category: "", query: "", selected: null };
-  const grid = document.getElementById("movie-grid");
-  const categories = document.getElementById("categories");
-  const count = document.getElementById("count");
-  const empty = document.getElementById("empty");
-  const modal = document.getElementById("detail-modal");
-  const toast = document.getElementById("toast");
+  const state = {
+    movies: [], recent: [], trending: [], category: "", query: "",
+    selected: null, adUrl: "", detail: null, loading: false
+  };
+  const $ = (id) => document.getElementById(id);
+  const home = $("home-screen");
+  const detailScreen = $("detail-screen");
+  const toast = $("toast");
   let toastTimer;
 
   function escapeHtml(value) {
-    return String(value || "").replace(/[&<>"']/g, function (char) {
-      return ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#039;" })[char];
-    });
+    return String(value || "").replace(/[&<>"']/g, (char) =>
+      ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#039;" })[char]);
   }
-
   function initials(title) {
-    return String(title || "M").trim().split(/\s+/).slice(0, 2).map(function (part) {
-      return part[0] || "";
-    }).join("").toUpperCase();
+    return String(title || "M").trim().split(/\s+/).slice(0, 2)
+      .map((part) => part[0] || "").join("").toUpperCase();
   }
-
-  function posterMarkup(movie, detail) {
+  function posterMarkup(movie, extraClass) {
     const fallback = '<div class="poster-fallback"><span>' + escapeHtml(initials(movie.title)) + "</span></div>";
-    if (!movie.poster_url) return fallback;
-    const image = '<img src="' + escapeHtml(movie.poster_url) + '" alt="' + escapeHtml(movie.title) + '" loading="lazy">';
-    return detail ? image : image;
+    const image = movie.poster_url
+      ? '<img src="' + escapeHtml(movie.poster_url) + '" alt="' + escapeHtml(movie.title) + '" loading="lazy" onerror="this.style.display=\'none\'">'
+      : "";
+    return '<div class="poster-media ' + (extraClass || "") + '">' + image + fallback + "</div>";
   }
-
-  function filteredMovies() {
-    const query = state.query.toLowerCase();
-    return state.movies.filter(function (movie) {
-      const matchesCategory = !state.category || movie.category === state.category;
-      const matchesQuery = !query || movie.title.toLowerCase().includes(query);
-      return matchesCategory && matchesQuery;
-    });
+  function formatHits(hits) {
+    return "◉ " + (hits > 999 ? (hits / 1000).toFixed(1) + "k" : hits || 0);
   }
-
-  function renderCategories(items) {
-    const all = [{ name: "", count: state.movies.length }].concat(items || []);
-    categories.innerHTML = all.map(function (item, index) {
-      const label = item.name || "সব";
-      return '<button type="button" class="' + ((!state.category && index === 0) || state.category === item.name ? "active" : "") + '" data-category="' + escapeHtml(item.name) + '">' +
-        escapeHtml(label) + ' <small>(' + item.count + ")</small></button>";
-    }).join("");
-    categories.querySelectorAll("button").forEach(function (button) {
-      button.addEventListener("click", function () {
-        state.category = button.dataset.category || "";
-        renderCategories(items);
-        renderMovies();
-      });
-    });
+  function filtered(items) {
+    const q = state.query.toLowerCase();
+    return items.filter((movie) =>
+      (!state.category || movie.category === state.category) &&
+      (!q || movie.title.toLowerCase().includes(q)));
   }
-
-  function renderMovies() {
-    const movies = filteredMovies();
-    count.textContent = movies.length + "টি";
-    empty.classList.toggle("hidden", movies.length > 0);
-    grid.innerHTML = movies.map(function (movie) {
-      return '<button type="button" class="movie-card" data-id="' + movie.id + '">' +
-        '<div class="poster">' + posterMarkup(movie, false) + "</div>" +
-        '<div class="movie-info"><h3>' + escapeHtml(movie.title) + "</h3>" +
-        '<p>' + escapeHtml(movie.category || "মুভি") + "</p></div></button>";
-    }).join("");
-    grid.querySelectorAll(".movie-card").forEach(function (card) {
-      card.addEventListener("click", function () {
-        openDetail(state.movies.find(function (movie) { return movie.id === Number(card.dataset.id); }));
-      });
-    });
-  }
-
-  function openDetail(movie) {
-    if (!movie) return;
-    state.selected = movie;
-    document.getElementById("detail-poster").innerHTML = posterMarkup(movie, true);
-    document.getElementById("detail-category").textContent = movie.category || "মুভি";
-    document.getElementById("detail-title").textContent = movie.title;
-    document.getElementById("detail-caption").textContent = movie.caption || "এই মুভির ফাইল পেতে নিচের বাটনে চাপুন।";
-    document.getElementById("claim-button").disabled = false;
-    document.getElementById("claim-button").textContent = "১০ সেকেন্ডের ad link নিন";
-    document.getElementById("claim-note").textContent = "সময় শেষ হলে আপনাকে স্বয়ংক্রিয়ভাবে বটে ফিরিয়ে দেওয়া হবে।";
-    modal.classList.remove("hidden");
-  }
-
   function showToast(message) {
     toast.textContent = message;
     toast.classList.add("show");
     clearTimeout(toastTimer);
-    toastTimer = setTimeout(function () { toast.classList.remove("show"); }, 3200);
+    toastTimer = setTimeout(() => toast.classList.remove("show"), 3200);
+  }
+  function headers() {
+    const result = { "Content-Type": "application/json" };
+    if (tg && tg.initData) result["X-Telegram-Init-Data"] = tg.initData;
+    return result;
+  }
+  async function api(url, options) {
+    const response = await fetch(url, options);
+    const data = await response.json();
+    if (!response.ok || !data.ok) throw new Error(data.error || "আবার চেষ্টা করুন।");
+    return data;
   }
 
+  function renderCategories(items) {
+    const all = [{ name: "", count: state.movies.length }].concat(items || []);
+    $("categories").innerHTML = all.map((item, index) => {
+      const active = (!state.category && index === 0) || state.category === item.name;
+      return '<button type="button" class="' + (active ? "active" : "") + '" data-category="' +
+        escapeHtml(item.name) + '">' + escapeHtml(item.name || "All") + "</button>";
+    }).join("");
+    $("categories").querySelectorAll("button").forEach((button) => {
+      button.addEventListener("click", () => {
+        state.category = button.dataset.category || "";
+        renderHome();
+      });
+    });
+  }
+  function card(movie, compact) {
+    return '<button type="button" class="movie-card ' + (compact ? "compact" : "") + '" data-id="' + movie.id + '">' +
+      '<div class="poster">' + posterMarkup(movie) +
+      '<span class="hits">' + formatHits(movie.hits) + "</span>" +
+      (compact ? '<span class="top-badge">🔥 TOP</span>' : "") + "</div>" +
+      '<div class="movie-info"><span class="movie-avatar">MB</span><div><h3>' +
+      escapeHtml(movie.title) + "</h3><p>" + escapeHtml(movie.category || "মুভি") + "</p></div></div></button>";
+  }
+  function bindCards(container) {
+    $(container).querySelectorAll(".movie-card").forEach((button) => {
+      button.addEventListener("click", () => openDetail(state.movies.find((movie) => movie.id === Number(button.dataset.id))));
+    });
+  }
+  function renderHome() {
+    renderCategories(state.categories);
+    const currentTrending = filtered(state.trending);
+    const currentRecent = filtered(state.recent);
+    const currentAll = filtered(state.movies);
+    const searching = Boolean(state.query || state.category);
+    $("trending-section").classList.toggle("hidden", searching);
+    $("recent-section").classList.toggle("hidden", searching);
+    $("all-heading").textContent = searching ? "Search Results" : "All Movies";
+    $("trending-strip").innerHTML = currentTrending.map((movie) => card(movie, true)).join("");
+    $("recent-grid").innerHTML = currentRecent.map((movie) => card(movie, false)).join("");
+    $("movie-grid").innerHTML = currentAll.map((movie) => card(movie, false)).join("");
+    $("count").textContent = currentAll.length + "টি";
+    $("empty").classList.toggle("hidden", currentAll.length > 0);
+    bindCards("trending-strip");
+    bindCards("recent-grid");
+    bindCards("movie-grid");
+  }
   async function loadMovies() {
     try {
-      const response = await fetch("/api/miniapp/movies", { cache: "no-store" });
-      const data = await response.json();
-      if (!response.ok || !data.ok) throw new Error("মুভি লোড করা যায়নি।");
+      const data = await api("/api/miniapp/movies?limit=1200", { cache: "no-store" });
       state.movies = data.movies || [];
-      renderCategories(data.categories);
-      renderMovies();
+      state.recent = data.recent || [];
+      state.trending = data.trending || [];
+      state.categories = data.categories || [];
+      renderHome();
     } catch (error) {
-      count.textContent = "সমস্যা";
+      $("count").textContent = "সমস্যা";
       showToast(error.message || "মুভি লোড করা যায়নি।");
     }
   }
-
-  document.getElementById("search").addEventListener("input", function (event) {
-    state.query = event.target.value.trim();
-    renderMovies();
-  });
-
-  document.querySelectorAll("[data-close]").forEach(function (element) {
-    element.addEventListener("click", function () { modal.classList.add("hidden"); });
-  });
-
-  document.getElementById("claim-button").addEventListener("click", async function () {
-    const button = document.getElementById("claim-button");
-    if (!state.selected) return;
-    if (!tg || !tg.initData) {
-      showToast("বটের ভেতর থেকে Mini App খুলে আবার চেষ্টা করুন।");
-      return;
-    }
-    button.disabled = true;
-    button.textContent = "লিংক তৈরি হচ্ছে...";
+  function showModal(id) { $(id).classList.remove("hidden"); }
+  function hideModal(id) { $(id).classList.add("hidden"); }
+  function showHome() {
+    home.classList.remove("hidden");
+    detailScreen.classList.add("hidden");
+    $("back-button").classList.add("hidden");
+    document.querySelector(".topbar-title").textContent = "Movies Link BD";
+    window.scrollTo(0, 0);
+  }
+  function openDetail(movie) {
+    if (!movie) return;
+    state.selected = movie;
+    home.classList.add("hidden");
+    detailScreen.classList.remove("hidden");
+    $("back-button").classList.remove("hidden");
+    document.querySelector(".topbar-title").textContent = "Movies Link BD";
+    $("detail-poster").innerHTML = posterMarkup(movie, "detail-poster-image");
+    $("detail-category").textContent = movie.category || "মুভি";
+    $("detail-title").textContent = movie.title;
+    $("detail-meta").textContent = formatHits(movie.hits) + "  ·  " + (movie.file_type || "Video").toUpperCase();
+    $("detail-caption").textContent = movie.caption || "মুভিটি পেতে Download বাটনে চাপুন।";
+    $("favorite-button").innerHTML = "♡ <span>Like</span>";
+    renderStars(0);
+    window.scrollTo(0, 0);
+    api("/api/miniapp/movies/" + movie.id, { headers: headers(), cache: "no-store" })
+      .then((data) => {
+        state.detail = data;
+        $("favorite-button").innerHTML = (data.favorite ? "♥" : "♡") + " <span>Like</span>";
+        renderStars(data.user_rating || 0, data.rating);
+      })
+      .catch(() => {});
+  }
+  function renderStars(selected, rating) {
+    $("rating-stars").innerHTML = [1, 2, 3, 4, 5].map((number) =>
+      '<button type="button" data-rating="' + number + '" class="' + (number <= selected ? "selected" : "") + '">★</button>'
+    ).join("") + (rating && rating.count ? '<small>' + rating.average + " / 5 (" + rating.count + ")</small>" : "");
+    $("rating-stars").querySelectorAll("button").forEach((button) => {
+      button.addEventListener("click", () => rateMovie(Number(button.dataset.rating)));
+    });
+  }
+  async function rateMovie(rating) {
+    if (!tg || !tg.initData) return showToast("বটের ভেতর থেকে Mini App খুলে rating দিন।");
     try {
-      const response = await fetch("/api/miniapp/claim", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "X-Telegram-Init-Data": tg.initData
-        },
-        body: JSON.stringify({ movie_id: state.selected.id, category: state.selected.category })
+      const data = await api("/api/miniapp/rating", {
+        method: "POST", headers: headers(),
+        body: JSON.stringify({ movie_id: state.selected.id, rating })
       });
-      const data = await response.json();
-      if (!response.ok || !data.ok) throw new Error(data.error || "Ad link তৈরি করা যায়নি।");
-      if (tg.openLink) tg.openLink(data.ad_url);
-      else window.location.href = data.ad_url;
-      button.textContent = "Ad link খোলা হয়েছে";
+      renderStars(rating, { average: data.average, count: data.count });
+      showToast("আপনার rating সংরক্ষণ হয়েছে।");
+    } catch (error) { showToast(error.message); }
+  }
+  $("favorite-button").addEventListener("click", async () => {
+    if (!state.selected) return;
+    if (!tg || !tg.initData) return showToast("বটের ভেতর থেকে Like দিন।");
+    try {
+      const data = await api("/api/miniapp/favorite", {
+        method: "POST", headers: headers(), body: JSON.stringify({ movie_id: state.selected.id })
+      });
+      $("favorite-button").innerHTML = (data.favorite ? "♥" : "♡") + " <span>Like</span>";
+      showToast(data.favorite ? "My List-এ যোগ হয়েছে।" : "My List থেকে সরানো হয়েছে।");
+    } catch (error) { showToast(error.message); }
+  });
+  $("download-button").addEventListener("click", () => {
+    if (!state.selected) return;
+    const match = (state.selected.file_name || "").match(/(2160|1440|1080|720|480)p/i);
+    $("quality-button").querySelector("span").textContent = "⇩ Download " + (match ? match[1] : "720") + "p";
+    showModal("quality-modal");
+  });
+  $("quality-button").addEventListener("click", async () => {
+    if (!state.selected) return;
+    if (!tg || !tg.initData) return showToast("বটের ভেতর থেকে Download করুন।");
+    $("quality-button").disabled = true;
+    $("quality-button").querySelector("span").textContent = "লিংক তৈরি হচ্ছে...";
+    try {
+      const data = await api("/api/miniapp/claim", {
+        method: "POST", headers: headers(), body: JSON.stringify({ movie_id: state.selected.id })
+      });
+      state.adUrl = data.ad_url;
+      hideModal("quality-modal");
+      showModal("unlock-modal");
     } catch (error) {
-      button.disabled = false;
-      button.textContent = "১০ সেকেন্ডের ad link নিন";
-      showToast(error.message || "আবার চেষ্টা করুন।");
+      showToast(error.message);
+    } finally {
+      $("quality-button").disabled = false;
     }
   });
-
+  $("open-ad-button").addEventListener("click", () => {
+    if (!state.adUrl) return showToast("লিংক তৈরি হয়নি।");
+    hideModal("unlock-modal");
+    showToast("Sending File... ১০ সেকেন্ড পরে bot inbox দেখুন।");
+    if (tg && tg.openLink) tg.openLink(state.adUrl);
+    else window.location.href = state.adUrl;
+  });
+  $("back-button").addEventListener("click", showHome);
+  $("search").addEventListener("input", (event) => {
+    state.query = event.target.value.trim();
+    renderHome();
+  });
+  $("close-announcement").addEventListener("click", () => $("announcement").remove());
+  $("trending-more").addEventListener("click", () => { state.query = ""; state.category = ""; renderHome(); $("all-section").scrollIntoView({ behavior: "smooth" }); });
+  $("recent-more").addEventListener("click", () => { state.query = ""; state.category = ""; renderHome(); $("all-section").scrollIntoView({ behavior: "smooth" }); });
+  document.querySelectorAll("[data-close-modal]").forEach((button) => {
+    button.addEventListener("click", () => hideModal(button.dataset.closeModal));
+  });
+  document.querySelectorAll(".nav-item").forEach((button) => {
+    button.addEventListener("click", () => {
+      document.querySelectorAll(".nav-item").forEach((item) => item.classList.remove("active"));
+      button.classList.add("active");
+      const nav = button.dataset.nav;
+      if (nav === "home") showHome();
+      else if (nav === "search") { showHome(); $("search").focus(); window.scrollTo(0, 0); }
+      else showToast(nav === "upcoming" ? "Upcoming movies শিগগিরই আসছে।" : nav === "maya" ? "Maya AI শিগগিরই আসছে।" : "Profile ও My List শিগগিরই আসছে।");
+    });
+  });
   loadMovies();
 })();

@@ -391,38 +391,53 @@ async def miniapp_page(request: web.Request) -> web.FileResponse:
     return web.FileResponse(_MINIAPP_DIR / "index.html")
 
 
+def _miniapp_movie_payload(row: Any) -> Dict[str, Any]:
+    return {
+        "id": row["id"],
+        "title": row["title"],
+        "category": row["category"] or "মুভি",
+        "poster_url": row["poster_url"] or "",
+        "caption": row["caption"] or "",
+        "file_type": row["file_type"],
+        "file_name": row["file_name"] or "",
+        "hits": int(row["hits"] or 0),
+        "size_bytes": int(row["size_bytes"] or 0),
+        "duration": int(row["duration"] or 0),
+        "added_at": float(row["added_at"] or 0),
+    }
+
+
 async def miniapp_movies(request: web.Request) -> web.Response:
     query = (request.query.get("q") or "").strip()
     category = (request.query.get("category") or "").strip()
     try:
-        limit = max(1, min(48, int(request.query.get("limit", "48"))))
+        limit = max(1, min(1200, int(request.query.get("limit", "1200"))))
         offset = max(0, int(request.query.get("offset", "0")))
     except ValueError:
-        limit, offset = 48, 0
+        limit, offset = 1200, 0
 
-    rows = await db.search_movies(query, limit=limit, offset=offset) if query else await db.list_movies(limit, offset)
+    if query:
+        rows = await db.search_movies(query, limit=limit, offset=offset)
+        recent_rows, trending_rows = [], []
+    else:
+        rows = await db.list_movies(limit, offset)
+        recent_rows = await db.list_movies(12, 0)
+        trending_rows = await db.get_popular_movies(12)
     if category:
         rows = [row for row in rows if (row["category"] or "মুভি") == category]
+        recent_rows = [row for row in recent_rows if (row["category"] or "মুভি") == category]
+        trending_rows = [row for row in trending_rows if (row["category"] or "মুভি") == category]
 
     categories = await db.fetch_all(
         "SELECT category, COUNT(*) AS count FROM movies GROUP BY category ORDER BY category"
     )
-    movies = []
-    for row in rows:
-        movies.append(
-            {
-                "id": row["id"],
-                "title": row["title"],
-                "category": row["category"] or "মুভি",
-                "poster_url": row["poster_url"] or "",
-                "caption": row["caption"] or "",
-                "file_type": row["file_type"],
-            }
-        )
     return web.json_response(
         {
             "ok": True,
-            "movies": movies,
+            "movies": [_miniapp_movie_payload(row) for row in rows],
+            "recent": [_miniapp_movie_payload(row) for row in recent_rows],
+            "trending": [_miniapp_movie_payload(row) for row in trending_rows],
+            "total": len(rows),
             "categories": [
                 {"name": row["category"] or "মুভি", "count": int(row["count"])}
                 for row in categories
@@ -430,6 +445,65 @@ async def miniapp_movies(request: web.Request) -> web.Response:
         },
         headers={"Cache-Control": "no-store"},
     )
+
+
+async def miniapp_movie_detail(request: web.Request) -> web.Response:
+    try:
+        movie_id = int(request.match_info["movie_id"])
+    except (KeyError, TypeError, ValueError):
+        return web.json_response({"ok": False, "error": "মুভিটি পাওয়া যায়নি।"}, status=404)
+    movie = await db.get_movie(movie_id)
+    if not movie:
+        return web.json_response({"ok": False, "error": "মুভিটি পাওয়া যায়নি।"}, status=404)
+    user_id = _miniapp_user_id(request)
+    average, rating_count = await db.get_movie_avg_rating(movie_id)
+    return web.json_response(
+        {
+            "ok": True,
+            "movie": _miniapp_movie_payload(movie),
+            "rating": {"average": average, "count": rating_count},
+            "user_rating": await db.get_user_rating(user_id, movie_id) if user_id else None,
+            "favorite": await db.is_favorite(user_id, movie_id) if user_id else False,
+        },
+        headers={"Cache-Control": "no-store"},
+    )
+
+
+async def miniapp_rate_movie(request: web.Request) -> web.Response:
+    user_id = _miniapp_user_id(request)
+    if not user_id:
+        return web.json_response({"ok": False, "error": "Telegram থেকে Mini App খুলে আবার চেষ্টা করুন।"}, status=401)
+    try:
+        body = await request.json()
+        movie_id = int(body.get("movie_id", 0))
+        rating = int(body.get("rating", 0))
+    except (TypeError, ValueError, json.JSONDecodeError):
+        return web.json_response({"ok": False, "error": "সঠিক rating দিন।"}, status=400)
+    if not await db.get_movie(movie_id) or rating < 1 or rating > 5:
+        return web.json_response({"ok": False, "error": "সঠিক rating দিন।"}, status=400)
+    await db.rate_movie(user_id, movie_id, rating)
+    average, count = await db.get_movie_avg_rating(movie_id)
+    return web.json_response({"ok": True, "average": average, "count": count, "user_rating": rating})
+
+
+async def miniapp_toggle_favorite(request: web.Request) -> web.Response:
+    user_id = _miniapp_user_id(request)
+    if not user_id:
+        return web.json_response({"ok": False, "error": "Telegram থেকে Mini App খুলে আবার চেষ্টা করুন।"}, status=401)
+    try:
+        body = await request.json()
+        movie_id = int(body.get("movie_id", 0))
+    except (TypeError, ValueError, json.JSONDecodeError):
+        return web.json_response({"ok": False, "error": "সঠিক মুভি নির্বাচন করুন।"}, status=400)
+    if not await db.get_movie(movie_id):
+        return web.json_response({"ok": False, "error": "মুভিটি পাওয়া যায়নি।"}, status=404)
+    if await db.is_favorite(user_id, movie_id):
+        await db.remove_favorite(user_id, movie_id)
+        favorite = False
+    else:
+        await db.add_favorite(user_id, movie_id)
+        favorite = True
+    return web.json_response({"ok": True, "favorite": favorite})
 
 
 async def miniapp_claim(request: web.Request) -> web.Response:
@@ -1612,6 +1686,9 @@ def setup_routes(app: web.Application) -> None:
     app.router.add_get("/miniapp", miniapp_page)
     app.router.add_get("/miniapp/", miniapp_page)
     app.router.add_get("/api/miniapp/movies", miniapp_movies)
+    app.router.add_get("/api/miniapp/movies/{movie_id}", miniapp_movie_detail)
+    app.router.add_post("/api/miniapp/rating", miniapp_rate_movie)
+    app.router.add_post("/api/miniapp/favorite", miniapp_toggle_favorite)
     app.router.add_post("/api/miniapp/claim", miniapp_claim)
     app.router.add_get("/login", login_get)
     app.router.add_post("/login", login_post)

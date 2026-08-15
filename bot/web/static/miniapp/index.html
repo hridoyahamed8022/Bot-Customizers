@@ -3,58 +3,113 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
-    <meta name="theme-color" content="#0b1020" />
+    <meta name="theme-color" content="#0c1728" />
     <link rel="icon" href="data:," />
-    <title>মুভি লাইব্রেরি · Moviex Hub</title>
+    <title>Movies Link BD · Moviex Hub</title>
     <link rel="stylesheet" href="/miniapp/assets/style.css" />
   </head>
   <body>
     <div class="app-shell">
-      <header class="hero">
-        <div class="brand-row">
-          <div class="brand-mark">M</div>
-          <div>
-            <p class="eyebrow">MOVIEX HUB</p>
-            <h1>আপনার মুভি লাইব্রেরি</h1>
-          </div>
-        </div>
-        <p class="hero-copy">পছন্দের মুভি বেছে নিন, ক্যাটাগরি নির্বাচন করুন, তারপর নিরাপদে ফাইল নিন।</p>
-        <label class="search-box">
-          <span aria-hidden="true">⌕</span>
-          <input id="search" type="search" placeholder="মুভির নাম লিখুন..." autocomplete="off" />
-        </label>
+      <header class="topbar">
+        <button id="back-button" class="icon-button hidden" type="button" aria-label="ফিরে যান">‹</button>
+        <div class="topbar-title">Movies Link <b>BD</b></div>
+        <button class="icon-button" type="button" aria-label="আরও">⋮</button>
       </header>
 
-      <main>
-        <section class="section-head">
-          <div>
-            <p class="eyebrow">COLLECTION</p>
-            <h2>সব মুভি</h2>
-          </div>
-          <span id="count" class="count-pill">লোড হচ্ছে...</span>
+      <main id="home-screen">
+        <section class="brand-panel">
+          <h1>Movies Link <b>BD</b></h1>
+          <span class="home-pill">⌂ Home Page</span>
         </section>
+
+        <section id="announcement" class="announcement">
+          <span class="announcement-icon">📣</span>
+          <div>
+            <strong>স্পেশাল নোটিশ!</strong>
+            <p>সার্চে কিছু না এলে বানান ঠিক আছে কি না দেখুন। পছন্দের মুভি পেতে আমাদের চ্যানেলে জয়েন করুন!</p>
+          </div>
+          <button id="close-announcement" type="button" aria-label="বন্ধ করুন">×</button>
+        </section>
+
+        <label class="search-box">
+          <span aria-hidden="true">⌕</span>
+          <input id="search" type="search" placeholder="Search Movies or Series..." autocomplete="off" />
+        </label>
+
         <div id="categories" class="category-row" aria-label="ক্যাটাগরি"></div>
-        <section id="movie-grid" class="movie-grid" aria-live="polite"></section>
-        <div id="empty" class="empty-state hidden">
-          <div class="empty-icon">⌁</div>
-          <h3>কোনো মুভি পাওয়া যায়নি</h3>
-          <p>অন্য নাম বা ক্যাটাগরি দিয়ে আবার চেষ্টা করুন।</p>
-        </div>
+
+        <section id="trending-section" class="content-section">
+          <div class="section-title"><h2>⚡ Trending now</h2><button id="trending-more" type="button">সব দেখুন ›</button></div>
+          <div id="trending-strip" class="poster-strip"></div>
+        </section>
+
+        <section id="recent-section" class="content-section">
+          <div class="section-title"><h2>↻ Recently Added</h2><button id="recent-more" type="button">সব দেখুন ›</button></div>
+          <div id="recent-grid" class="movie-grid"></div>
+        </section>
+
+        <section id="all-section" class="content-section">
+          <div class="section-title"><h2 id="all-heading">সব মুভি</h2><span id="count" class="count-pill">লোড হচ্ছে...</span></div>
+          <div id="movie-grid" class="movie-grid"></div>
+          <div id="empty" class="empty-state hidden">
+            <div class="empty-icon">⌁</div>
+            <h3>কোনো মুভি পাওয়া যায়নি</h3>
+            <p>অন্য নাম বা ক্যাটাগরি দিয়ে আবার চেষ্টা করুন।</p>
+          </div>
+        </section>
       </main>
+
+      <section id="detail-screen" class="detail-screen hidden">
+        <div class="detail-hero">
+          <div id="detail-poster" class="detail-poster"></div>
+          <div class="detail-gradient"></div>
+        </div>
+        <div class="detail-body">
+          <span id="detail-category" class="category-label"></span>
+          <h1 id="detail-title"></h1>
+          <p id="detail-meta" class="detail-meta"></p>
+          <div class="detail-actions">
+            <button id="favorite-button" class="secondary-button" type="button">♡ <span>Like</span></button>
+            <button id="download-button" class="primary-button" type="button">⇩ Download</button>
+          </div>
+          <p id="detail-caption" class="detail-caption"></p>
+          <section class="rating-panel">
+            <div><strong>Comments (0)</strong><span>Your Rating</span></div>
+            <div id="rating-stars" class="rating-stars" aria-label="রেটিং"></div>
+            <div class="comment-box"><input placeholder="Add a public comment..." disabled /><button type="button" disabled>➤</button></div>
+          </section>
+        </div>
+      </section>
+
+      <nav class="bottom-nav" aria-label="মূল নেভিগেশন">
+        <button class="nav-item active" data-nav="home" type="button"><span>⌂</span><small>Home</small></button>
+        <button class="nav-item" data-nav="search" type="button"><span>⌕</span><small>Search</small></button>
+        <button class="nav-item" data-nav="upcoming" type="button"><span>▣</span><small>Upcoming</small></button>
+        <button class="nav-item" data-nav="maya" type="button"><span>✣</span><small>Maya AI</small></button>
+        <button class="nav-item" data-nav="profile" type="button"><span>●</span><small>Profile</small></button>
+      </nav>
     </div>
 
-    <div id="detail-modal" class="modal hidden" role="dialog" aria-modal="true" aria-labelledby="detail-title">
-      <div class="modal-backdrop" data-close></div>
-      <article class="detail-card">
-        <button class="close-button" type="button" data-close aria-label="বন্ধ করুন">×</button>
-        <div id="detail-poster" class="detail-poster"></div>
-        <div class="detail-content">
-          <span id="detail-category" class="category-label"></span>
-          <h2 id="detail-title"></h2>
-          <p id="detail-caption" class="detail-caption"></p>
-          <button id="claim-button" class="primary-button" type="button">১০ সেকেন্ডের ad link নিন</button>
-          <p id="claim-note" class="claim-note">সময় শেষ হলে আপনাকে স্বয়ংক্রিয়ভাবে বটে ফিরিয়ে দেওয়া হবে।</p>
-        </div>
+    <div id="quality-modal" class="modal hidden" role="dialog" aria-modal="true">
+      <div class="modal-backdrop" data-close-modal="quality-modal"></div>
+      <article class="action-sheet">
+        <button class="close-button" type="button" data-close-modal="quality-modal">×</button>
+        <div class="sheet-icon">▣</div>
+        <h2>Select Video Quality</h2>
+        <p>Choose your preferred quality to unlock/download</p>
+        <div class="how-to"><strong>ⓘ How to download:</strong><br />Click any quality, wait 10s on the unlock page, then return to the app. The file will appear in your inbox automatically!</div>
+        <button id="quality-button" class="quality-button" type="button"><span>⇩ Download 720p</span><b>▣</b></button>
+      </article>
+    </div>
+
+    <div id="unlock-modal" class="modal hidden" role="dialog" aria-modal="true">
+      <div class="modal-backdrop" data-close-modal="unlock-modal"></div>
+      <article class="unlock-sheet">
+        <button class="close-button" type="button" data-close-modal="unlock-modal">⌃</button>
+        <div class="unlock-icon">♧</div>
+        <h2>Unlock Video</h2>
+        <p>To unlock this file, wait 10 seconds on the link below.</p>
+        <button id="open-ad-button" class="ad-button" type="button">🔗 Click Here (Open Link)</button>
       </article>
     </div>
 
