@@ -152,7 +152,7 @@ body{
 {% else %}
   <span class="logo">🎬</span>
   <div class="movie-title">{{ title }}</div>
-  <span class="badge">Moviex Hub</span>
+  <span class="badge">{{ brand_name }}</span>
 
   <svg style="display:none" width="0" height="0">
     <defs>
@@ -190,7 +190,7 @@ body{
   </a>
 {% endif %}
 
-  <div class="footer">🎬 Moviex Hub · @{{ bot_username }}</div>
+  <div class="footer">🎬 {{ brand_name }} · @{{ bot_username }}</div>
 </div>
 
 {% if not used and not expired and token_valid %}
@@ -213,7 +213,13 @@ body{
     btn.className = 'btn btn-primary';
     btn.removeAttribute('href');
     btn.textContent = '📬 বটে ফাইল পাঠানো হচ্ছে...';
-    fetch(completeUrl, {method:'POST', headers:{'Content-Type':'application/json'}})
+    fetch(completeUrl, {
+      method:'POST',
+      credentials:'same-origin',
+      cache:'no-store',
+      keepalive:true,
+      headers:{'Content-Type':'application/json'}
+    })
       .then(function(response){ return response.json(); })
       .then(function(data){
         if(data.ok){
@@ -232,6 +238,13 @@ body{
         btn.textContent = '🎬 মুভি পান → Telegram খুলুন';
       });
   }
+
+  btn.addEventListener('click', function(event){
+    if(remaining <= 0){
+      event.preventDefault();
+      completeDelivery();
+    }
+  });
 
   function tick(){
     if(remaining <= 0){

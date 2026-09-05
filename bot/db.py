@@ -1204,6 +1204,23 @@ class Database:
         )
         await self._conn.commit()
 
+    async def claim_ad_token(self, token: str) -> bool:
+        """Atomically reserve a token while one delivery is in progress."""
+        assert self._conn is not None
+        async with self._lock:
+            cur = await self._conn.execute(
+                "UPDATE ad_tokens SET used=-1 WHERE token=? AND used=0",
+                (token,),
+            )
+            await self._conn.commit()
+            return cur.rowcount == 1
+
+    async def release_ad_token(self, token: str) -> None:
+        """Make a failed delivery claimable again."""
+        await self.execute(
+            "UPDATE ad_tokens SET used=0 WHERE token=? AND used=-1", (token,)
+        )
+
     async def count_ad_tokens_total(self) -> int:
         val = await self.fetch_value("SELECT COUNT(*) FROM ad_tokens", ())
         return int(val or 0)

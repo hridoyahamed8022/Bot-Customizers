@@ -1,2 +1,3 @@
 - [Replit proxy breaks aiohttp HTTP redirects](replit-proxy-aiohttp-redirects.md) — admin login/logout loops or lost sessions behind the shared proxy; use JS redirects + SameSite=None cookies instead of raise HTTPFound.
 - [Telegram bot ad-gated delivery pattern](telegram-ad-gated-delivery.md) — token-based countdown web page + deep-link handoff to gate file delivery behind an ad wait timer.
+- [Ad token delivery locking](ad-token-delivery-locking.md) — Mini App, Telegram callback, and deep-link delivery must share one atomic claim/release/used state.

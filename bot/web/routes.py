@@ -362,9 +362,22 @@ async def movie_edit_save(request: web.Request) -> web.Response:
 # ──────────────────────────────────────────────────────────────── #
 # Telegram Mini App
 # ──────────────────────────────────────────────────────────────── #
+def _miniapp_init_data(request: web.Request) -> str:
+    return (
+        request.headers.get("X-Telegram-Init-Data", "").strip()
+        or request.headers.get("X-Telegram-WebApp-Init-Data", "").strip()
+        or (
+            request.headers.get("Authorization", "").strip()[4:]
+            if request.headers.get("Authorization", "").strip().lower().startswith("tma ")
+            else ""
+        )
+        or request.query.get("init_data", "").strip()
+    )
+
+
 def _miniapp_user_profile(request: web.Request) -> Optional[Tuple[int, Dict[str, Any]]]:
     """Validate Telegram WebApp initData and return the trusted user profile."""
-    raw = request.headers.get("X-Telegram-Init-Data", "").strip()
+    raw = _miniapp_init_data(request)
     if not raw:
         return None
     try:
@@ -394,8 +407,45 @@ def _miniapp_user_id(request: web.Request) -> Optional[int]:
     return profile[0] if profile else None
 
 
+def _miniapp_actor(request: web.Request) -> Optional[Tuple[int, Dict[str, Any]]]:
+    """Use verified Telegram identity, or a stable guest identity for ratings/comments."""
+    profile = _miniapp_user_profile(request)
+    if profile:
+        return profile
+    if _miniapp_init_data(request):
+        return None
+    fingerprint = f"{request.remote or 'browser'}|{request.headers.get('User-Agent', '')}"
+    guest_id = -(int(hashlib.sha256(fingerprint.encode()).hexdigest()[:12], 16) % 2_000_000_000 + 1)
+    return guest_id, {"first_name": "Guest"}
+
+
 async def miniapp_page(request: web.Request) -> web.FileResponse:
     return web.FileResponse(_MINIAPP_DIR / "index.html")
+
+
+async def _bot_identity(request: web.Request) -> Tuple[str, str]:
+    """Return the live Telegram display name and username, with safe fallback."""
+    cached = request.app.get("bot_identity")
+    if cached:
+        return cached
+    name = await db.get_setting("bot_name", "Moviex Hub")
+    username = await db.get_setting("bot_username", "Moviex_hub_bot")
+    try:
+        me = await request.app["bot"].get_me()
+        name = me.first_name or me.username or name
+        username = me.username or username
+    except Exception:
+        log.exception("Could not load live bot identity")
+    request.app["bot_identity"] = (name, username)
+    return name, username
+
+
+async def miniapp_config(request: web.Request) -> web.Response:
+    name, username = await _bot_identity(request)
+    return web.json_response(
+        {"ok": True, "brand_name": name, "bot_username": username},
+        headers={"Cache-Control": "no-store"},
+    )
 
 
 def _miniapp_movie_payload(row: Any) -> Dict[str, Any]:
@@ -553,9 +603,10 @@ async def miniapp_movie_detail(request: web.Request) -> web.Response:
 
 
 async def miniapp_rate_movie(request: web.Request) -> web.Response:
-    user_id = _miniapp_user_id(request)
-    if not user_id:
-        return web.json_response({"ok": False, "error": "Telegram থেকে Mini App খুলে আবার চেষ্টা করুন।"}, status=401)
+    actor = _miniapp_actor(request)
+    if not actor:
+        return web.json_response({"ok": False, "error": "Telegram session যাচাই করা যায়নি। Mini App আবার খুলুন।"}, status=401)
+    user_id = actor[0]
     try:
         body = await request.json()
         movie_id = int(body.get("movie_id", 0))
@@ -633,10 +684,10 @@ async def miniapp_comments(request: web.Request) -> web.Response:
 
 
 async def miniapp_add_comment(request: web.Request) -> web.Response:
-    profile = _miniapp_user_profile(request)
-    if not profile:
-        return web.json_response({"ok": False, "error": "Telegram থেকে Mini App খুলে comment করুন।"}, status=401)
-    user_id, user = profile
+    actor = _miniapp_actor(request)
+    if not actor:
+        return web.json_response({"ok": False, "error": "Telegram session যাচাই করা যায়নি। Mini App আবার খুলুন।"}, status=401)
+    user_id, user = actor
     try:
         body = await request.json()
         movie_id = int(body.get("movie_id", 0))
@@ -647,7 +698,7 @@ async def miniapp_add_comment(request: web.Request) -> web.Response:
         return web.json_response({"ok": False, "error": "Comment ১ থেকে ৫০০ অক্ষরের মধ্যে দিন।"}, status=400)
     if not await db.get_movie(movie_id):
         return web.json_response({"ok": False, "error": "মুভিটি পাওয়া যায়নি।"}, status=404)
-    display_name = user.get("first_name") or user.get("username") or "Movie fan"
+    display_name = user.get("first_name") or user.get("username") or "Guest"
     await db.add_movie_comment(user_id, display_name, movie_id, comment)
     return web.json_response({"ok": True, "name": display_name, "comment": comment})
 
@@ -766,8 +817,10 @@ async def miniapp_complete_ad(request: web.Request) -> web.Response:
     row = await db.get_ad_token(token)
     if not row:
         return web.json_response({"ok": False, "error": "লিংকটি আর কার্যকর নেই।"}, status=404)
-    if row["used"]:
+    if row["used"] == 1:
         return web.json_response({"ok": True, "already_sent": True})
+    if row["used"] == -1:
+        return web.json_response({"ok": True, "processing": True})
     if time.time() > row["expires_at"]:
         return web.json_response({"ok": False, "error": "লিংকের মেয়াদ শেষ হয়ে গেছে।"}, status=410)
 
@@ -782,12 +835,16 @@ async def miniapp_complete_ad(request: web.Request) -> web.Response:
         async def answer(self, text: str, **kwargs: Any):
             return await self.bot.send_message(self.chat.id, text, **kwargs)
 
+    if not await db.claim_ad_token(token):
+        return web.json_response({"ok": True, "processing": True})
     delivered = await deliver_movie(
         _DirectTarget(request.app["bot"], row["user_id"]), row["movie_id"]
     )
     if not delivered:
+        await db.release_ad_token(token)
         return web.json_response({"ok": False, "error": "ফাইল পাঠানো যায়নি।"}, status=502)
     await db.mark_ad_token_used(token)
+    log.info("Ad delivery completed: token=%s user=%s movie=%s", token[:8], row["user_id"], row["movie_id"])
     return web.json_response({"ok": True, "sent": True})
 
 
@@ -1834,7 +1891,7 @@ async def ad_page(request: web.Request) -> web.Response:
     token = request.match_info["token"]
     row = await db.get_ad_token(token)
 
-    bot_username = await db.get_setting("bot_username", "Moviex_hub_bot")
+    brand_name, bot_username = await _bot_identity(request)
     stored_wait = row["wait_seconds"] if row and "wait_seconds" in row else None
     wait_secs = max(
         5,
@@ -1850,6 +1907,7 @@ async def ad_page(request: web.Request) -> web.Response:
             "ad.html", request,
             {"token_valid": False, "used": False, "expired": False,
              "title": "", "bot_username": bot_username,
+             "brand_name": brand_name,
              "wait_secs": wait_secs, "circumference": circumference, "tg_link": "",
              "complete_url": f"/ad/{token}/complete", "token": token},
         )
@@ -1860,6 +1918,7 @@ async def ad_page(request: web.Request) -> web.Response:
             "ad.html", request,
             {"token_valid": True, "used": True, "expired": False,
              "title": "", "bot_username": bot_username,
+             "brand_name": brand_name,
              "wait_secs": wait_secs, "circumference": circumference, "tg_link": "",
              "complete_url": f"/ad/{token}/complete", "token": token},
         )
@@ -1869,6 +1928,7 @@ async def ad_page(request: web.Request) -> web.Response:
             "ad.html", request,
             {"token_valid": True, "used": False, "expired": True,
              "title": "", "bot_username": bot_username,
+             "brand_name": brand_name,
              "wait_secs": wait_secs, "circumference": circumference, "tg_link": "",
              "complete_url": f"/ad/{token}/complete", "token": token},
         )
@@ -1881,6 +1941,7 @@ async def ad_page(request: web.Request) -> web.Response:
         "ad.html", request,
         {"token_valid": True, "used": False, "expired": False,
          "title": title, "bot_username": bot_username,
+         "brand_name": brand_name,
          "wait_secs": wait_secs, "circumference": circumference, "tg_link": tg_link,
          "complete_url": f"/ad/{token}/complete", "token": token},
     )
@@ -1942,6 +2003,7 @@ def setup_routes(app: web.Application) -> None:
     app.router.add_get("/uptime", health)
     app.router.add_get("/miniapp", miniapp_page)
     app.router.add_get("/miniapp/", miniapp_page)
+    app.router.add_get("/api/miniapp/config", miniapp_config)
     app.router.add_get("/api/miniapp/movies", miniapp_movies)
     app.router.add_get("/api/miniapp/posters/{movie_id}", miniapp_poster)
     app.router.add_get("/api/miniapp/movies/{movie_id}", miniapp_movie_detail)
@@ -1952,6 +2014,7 @@ def setup_routes(app: web.Application) -> None:
     app.router.add_post("/api/miniapp/favorite", miniapp_toggle_favorite)
     app.router.add_post("/api/miniapp/claim", miniapp_claim)
     app.router.add_post("/ad/{token}/complete", miniapp_complete_ad)
+    app.router.add_get("/ad/{token}/complete", miniapp_complete_ad)
     app.router.add_get("/login", login_get)
     app.router.add_post("/login", login_post)
     app.router.add_post("/logout", logout)

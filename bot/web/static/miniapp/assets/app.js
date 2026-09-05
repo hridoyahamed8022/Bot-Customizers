@@ -13,6 +13,7 @@
     movies: [], recent: [], trending: [], upcoming: [], categories: [],
     category: "", query: "", selected: null, detail: null, adUrl: ""
   };
+  let brandName = "Moviex Hub";
   const $ = (id) => document.getElementById(id);
   const home = $("home-screen");
   const detailScreen = $("detail-screen");
@@ -50,12 +51,27 @@
     clearTimeout(toastTimer);
     toastTimer = setTimeout(() => toast.classList.remove("show"), 3200);
   }
+  function applyBrand(name) {
+    if (!name) return;
+    brandName = name;
+    document.title = brandName;
+    document.querySelectorAll(".brand-name").forEach((node) => {
+      node.textContent = brandName;
+    });
+    document.querySelector(".topbar-title").textContent = brandName;
+  }
   function headers() {
     const result = { "Content-Type": "application/json" };
-    if (tg && tg.initData) result["X-Telegram-Init-Data"] = tg.initData;
+    if (tg && tg.initData) {
+      result["X-Telegram-Init-Data"] = tg.initData;
+      result.Authorization = "tma " + tg.initData;
+    }
     return result;
   }
   async function api(url, options) {
+    if (tg && tg.initData && url.indexOf("init_data=") === -1) {
+      url += (url.indexOf("?") === -1 ? "?" : "&") + "init_data=" + encodeURIComponent(tg.initData);
+    }
     const response = await fetch(url, options);
     const data = await response.json();
     if (!response.ok || !data.ok) throw new Error(data.error || "আবার চেষ্টা করুন।");
@@ -151,13 +167,21 @@
       showToast(error.message || "ডাটা লোড করা যায়নি।");
     }
   }
+  async function loadConfig() {
+    try {
+      const data = await api("/api/miniapp/config", { cache: "no-store" });
+      applyBrand(data.brand_name);
+    } catch (error) {
+      // Static Moviex Hub fallback keeps the app usable if Telegram is offline.
+    }
+  }
   function showModal(id) { $(id).classList.remove("hidden"); }
   function hideModal(id) { $(id).classList.add("hidden"); }
   function showHome() {
     home.classList.remove("hidden");
     detailScreen.classList.add("hidden");
     $("back-button").classList.add("hidden");
-    document.querySelector(".topbar-title").textContent = "Moviex Hub";
+    document.querySelector(".topbar-title").textContent = brandName;
     renderHome();
     window.scrollTo(0, 0);
   }
@@ -168,7 +192,7 @@
     home.classList.add("hidden");
     detailScreen.classList.remove("hidden");
     $("back-button").classList.remove("hidden");
-    document.querySelector(".topbar-title").textContent = "Moviex Hub";
+    document.querySelector(".topbar-title").textContent = brandName;
     $("detail-poster").innerHTML = posterMarkup(movie, "detail-poster-image");
     $("detail-category").textContent = movie.category || "মুভি";
     $("detail-title").textContent = movie.title;
@@ -203,7 +227,6 @@
       '<p class="no-comments">এখনও কোনো comment নেই। প্রথম comment করুন!</p>';
   }
   async function rateMovie(rating) {
-    if (!tg || !tg.initData) return showToast("বটের ভেতর থেকে Mini App খুলে rating দিন।");
     try {
       const data = await api("/api/miniapp/rating", {
         method: "POST", headers: headers(),
@@ -217,7 +240,6 @@
     const input = $("comment-input");
     const comment = input.value.trim();
     if (!comment || !state.selected) return;
-    if (!tg || !tg.initData) return showToast("বটের ভেতর থেকে comment করুন।");
     $("comment-button").disabled = true;
     try {
       await api("/api/miniapp/movies/" + state.selected.id + "/comments", {
@@ -299,5 +321,6 @@
       }
     });
   });
+  loadConfig();
   loadMovies();
 })();

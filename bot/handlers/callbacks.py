@@ -132,6 +132,7 @@ async def _ad_countdown_deliver(
     bot,
     chat_id: int,
     msg_id: int,
+    token: str,
     movie_id: int,
     ad_url: str,
     title: str,
@@ -160,6 +161,12 @@ async def _ad_countdown_deliver(
     except Exception:
         pass
 
+    token_row = await db.get_ad_token(token)
+    if not token_row or token_row["used"] == 1:
+        return
+    if not await db.claim_ad_token(token):
+        return
+
     class _FakeMessage:
         def __init__(self, b, cid):
             self.bot = b
@@ -169,7 +176,10 @@ async def _ad_countdown_deliver(
             return await self.bot.send_message(self.chat.id, text, **kw)
 
     fake = _FakeMessage(bot, chat_id)
-    await deliver_movie(fake, movie_id)
+    if await deliver_movie(fake, movie_id):
+        await db.mark_ad_token_used(token)
+    else:
+        await db.release_ad_token(token)
 
 
 async def send_ad_link(callback: CallbackQuery, movie_id: int) -> None:
@@ -204,6 +214,7 @@ async def send_ad_link(callback: CallbackQuery, movie_id: int) -> None:
             callback.bot,
             callback.from_user.id,
             sent.message_id,
+            token,
             movie_id,
             ad_url,
             movie["title"],
@@ -218,8 +229,11 @@ async def deliver_movie_by_token(message: Message, token: str) -> None:
     if not row:
         await message.answer("❌ লিংকটি আর কার্যকর নেই। আবার সার্চ করুন।")
         return
-    if row["used"]:
+    if row["used"] == 1:
         await message.answer("⚠️ এই লিংকটি আগেই ব্যবহার হয়েছে। আবার সার্চ করুন।")
+        return
+    if row["used"] == -1:
+        await message.answer("⏳ ফাইল পাঠানো হচ্ছে—একটু পরে আপনার inbox দেখুন।")
         return
     if time.time() > row["expires_at"]:
         await message.answer("⏰ লিংকের মেয়াদ শেষ হয়ে গেছে (২ ঘণ্টা)। আবার সার্চ করুন।")
@@ -227,8 +241,13 @@ async def deliver_movie_by_token(message: Message, token: str) -> None:
     if row["user_id"] != message.from_user.id:
         await message.answer("⛔ এই লিংকটি আপনার জন্য নয়।")
         return
+    if not await db.claim_ad_token(token):
+        await message.answer("⏳ এই ফাইলটি ইতিমধ্যে পাঠানো হচ্ছে বা পাঠানো হয়েছে।")
+        return
     if await deliver_movie(message, row["movie_id"]):
         await db.mark_ad_token_used(token)
+    else:
+        await db.release_ad_token(token)
 
 
 @router.callback_query(F.data.startswith("m:get:"))
