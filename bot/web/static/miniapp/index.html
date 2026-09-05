@@ -4,20 +4,34 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
     <meta name="theme-color" content="#0c1728" />
-    <link rel="icon" href="data:," />
+    <link rel="icon" type="image/jpeg" href="/miniapp/assets/moviex-hub-logo.jpg" />
+    <link rel="preload" as="image" href="/miniapp/assets/moviex-hub-logo.jpg" />
     <title>Moviex Hub</title>
     <link rel="stylesheet" href="/miniapp/assets/style.css" />
   </head>
   <body>
+    <div id="app-splash" class="app-splash" role="status" aria-label="Moviex Hub লোড হচ্ছে">
+      <div class="splash-halo"></div>
+      <div class="splash-logo-wrap">
+        <img class="splash-logo" src="/miniapp/assets/moviex-hub-logo.jpg" alt="Moviex Hub logo" />
+        <div class="splash-name">Moviex Hub</div>
+        <div class="splash-tagline">Your movie universe</div>
+      </div>
+      <div class="splash-loader"><span></span><span></span><span></span></div>
+    </div>
     <div class="app-shell">
       <header class="topbar">
         <button id="back-button" class="icon-button hidden" type="button" aria-label="ফিরে যান">‹</button>
-        <div class="topbar-title"><span class="brand-name">Moviex Hub</span></div>
+        <div class="topbar-title">
+          <img class="topbar-logo" src="/miniapp/assets/moviex-hub-logo.jpg" alt="" />
+          <span class="brand-name">Moviex Hub</span>
+        </div>
         <button class="icon-button" type="button" aria-label="আরও">⋮</button>
       </header>
 
       <main id="home-screen">
         <section class="brand-panel">
+          <img class="brand-logo" src="/miniapp/assets/moviex-hub-logo.jpg" alt="Moviex Hub logo" />
           <h1 class="brand-name">Moviex Hub</h1>
           <span class="home-pill">⌂ Home Page</span>
         </section>

@@ -23,6 +23,11 @@
   const toast = $("toast");
   let toastTimer;
 
+  window.setTimeout(() => {
+    const splash = $("app-splash");
+    if (splash) splash.classList.add("hidden");
+  }, 2200);
+
   function escapeHtml(value) {
     return String(value || "").replace(/[&<>"']/g, (char) =>
       ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#039;" })[char]);
