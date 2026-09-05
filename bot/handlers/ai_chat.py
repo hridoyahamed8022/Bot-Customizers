@@ -24,6 +24,7 @@ from aiogram.utils.keyboard import InlineKeyboardBuilder
 
 from ..db import db
 from ..utils import schedule_delete, MSG_TTL
+from .common import watch_now_button
 
 log = logging.getLogger(__name__)
 router = Router(name="ai_chat")
@@ -201,6 +202,9 @@ def _exit_kb() -> InlineKeyboardMarkup:
     kb = InlineKeyboardBuilder()
     kb.button(text="❌ চ্যাট শেষ করুন", callback_data="ai:chat:exit")
     kb.button(text="🏠 হোম", callback_data="home")
+    watch = watch_now_button()
+    if watch:
+        kb.row(watch)
     kb.adjust(2)
     return kb.as_markup()
 
@@ -222,6 +226,9 @@ def _result_kb(found_rows: List[Any]) -> InlineKeyboardMarkup:
         InlineKeyboardButton(text="🎬 রিকোয়েস্ট করুন", callback_data="req:from_search"),
         InlineKeyboardButton(text="❌ চ্যাট বন্ধ", callback_data="ai:chat:exit"),
     )
+    watch = watch_now_button()
+    if watch:
+        kb.row(watch)
     return kb.as_markup()
 
 
@@ -230,6 +237,9 @@ def _chat_kb() -> InlineKeyboardMarkup:
     kb.button(text="🔍 সার্চ করুন", callback_data="search:start")
     kb.button(text="🎬 রিকোয়েস্ট", callback_data="req:from_search")
     kb.button(text="❌ চ্যাট বন্ধ", callback_data="ai:chat:exit")
+    watch = watch_now_button()
+    if watch:
+        kb.row(watch)
     kb.adjust(2, 1)
     return kb.as_markup()
 

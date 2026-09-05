@@ -28,8 +28,8 @@ A Telegram bot (@Moviex_hub_bot) that lets users search for and receive Bengali/
 
 - **Ad monetization flow**: movie delivery is gated behind a countdown ad page instead of a direct file send.
   1. User taps a movie button (`m:get:{id}`) → if `ad_enabled` setting is on, bot creates a row in `ad_tokens` (token, movie_id, user_id, 2h expiry) and sends a link to `{public_url}/ad/{token}`.
-  2. `/ad/{token}` (public aiohttp route, no auth) renders a countdown page; after the configured wait, a button opens `https://t.me/{bot_username}?start=get_{token}`.
-  3. Bot's `/start get_{token}` handler validates the token (exists, unused, unexpired, matches user) then delivers the movie and marks the token used.
+  2. `/ad/{token}` (public aiohttp route, no auth) renders a countdown page; after the configured wait, the page calls `/ad/{token}/complete` so the server sends the movie directly to the user's bot inbox.
+  3. The Telegram `/start get_{token}` handler remains a validated fallback for browsers where the direct completion request cannot finish. Both paths use the same atomic unused → sending → used token state.
   - Configurable via admin panel Settings page: `ad_enabled`, `ad_wait_seconds` (5–300s), `bot_username` — stored as normal `settings` k/v rows.
   - The `/ad/{token}` URL sent to users is wrapped through a real ad-monetization shortlink service before sending (`bot/utils_ouo.py::shorten_url`) — primary provider ShrinkMe.io, fallback Ouo.io, final fallback is the raw unshortened link so delivery is never blocked. Keys: `SHRINKME_API_KEY`, `OUO_API_KEY` secrets.
 - **Admin panel redirects use JS (`window.location.replace`), not HTTP 302** — see gotcha below.
@@ -42,7 +42,8 @@ A Telegram bot (@Moviex_hub_bot) that lets users search for and receive Bengali/
 ## Product
 
 - Users DM the bot, search movies by (English-only) title, must join force-join channels once, then request a file.
-- If ad monetization is on, users must visit a countdown ad page and wait out a timer before the bot delivers the file via a `/start get_{token}` deep link.
+- If ad monetization is on, users must visit a countdown ad page and wait out a timer before the bot delivers the file directly to their inbox; a deep link is available as a fallback.
+- The Telegram Mini App is served from `/miniapp/` and provides Home, Trending, Recently Added, Upcoming, Maya AI movie search, Profile/My List, comments, ratings, and ad-unlock delivery.
 - Admin web panel (Bengali UI) manages: movie library, broadcasts, movie requests, bot messages, channels, users/bans, stats, force-join channels, maintenance mode, and ad settings.
 
 ## User preferences

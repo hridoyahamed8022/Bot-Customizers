@@ -11,12 +11,15 @@
 
   const state = {
     movies: [], recent: [], trending: [], upcoming: [], categories: [],
-    category: "", query: "", selected: null, detail: null, adUrl: ""
+    category: "", query: "", selected: null, detail: null, adUrl: "",
+    profileFavorites: [], mayaHistory: []
   };
   let brandName = "Moviex Hub";
   const $ = (id) => document.getElementById(id);
   const home = $("home-screen");
   const detailScreen = $("detail-screen");
+  const mayaScreen = $("maya-screen");
+  const profileScreen = $("profile-screen");
   const toast = $("toast");
   let toastTimer;
 
@@ -115,7 +118,9 @@
           if (item) showToast(item.release_date ? item.title + " · " + item.release_date : item.title + " · Coming soon");
           return;
         }
-        openDetail(state.movies.find((movie) => movie.id === Number(button.dataset.id)));
+        const movie = state.movies.concat(state.profileFavorites || [])
+          .find((entry) => entry.id === Number(button.dataset.id));
+        openDetail(movie);
       });
     });
   }
@@ -177,13 +182,97 @@
   }
   function showModal(id) { $(id).classList.remove("hidden"); }
   function hideModal(id) { $(id).classList.add("hidden"); }
+  function setActiveNav(name) {
+    document.querySelectorAll(".nav-item").forEach((item) =>
+      item.classList.toggle("active", item.dataset.nav === name));
+  }
   function showHome() {
     home.classList.remove("hidden");
     detailScreen.classList.add("hidden");
+    mayaScreen.classList.add("hidden");
+    profileScreen.classList.add("hidden");
     $("back-button").classList.add("hidden");
     document.querySelector(".topbar-title").textContent = brandName;
     renderHome();
     window.scrollTo(0, 0);
+  }
+  function hideMainScreens() {
+    home.classList.add("hidden");
+    detailScreen.classList.add("hidden");
+    mayaScreen.classList.add("hidden");
+    profileScreen.classList.add("hidden");
+    $("back-button").classList.add("hidden");
+  }
+  function renderProfileStats(stats) {
+    const items = [
+      ["downloads", "Downloads"], ["requests", "Requests"],
+      ["favorites", "My List"], ["warnings", "Warnings"]
+    ];
+    $("profile-stats").innerHTML = items.map((item) =>
+      '<div class="profile-stat"><strong>' + (stats[item[0]] || 0) +
+      '</strong><span>' + item[1] + "</span></div>").join("");
+  }
+  async function showProfile() {
+    hideMainScreens();
+    profileScreen.classList.remove("hidden");
+    document.querySelector(".topbar-title").textContent = "Profile";
+    $("profile-favorites").innerHTML = '<div class="loading">লোড হচ্ছে...</div>';
+    try {
+      const data = await api("/api/miniapp/profile", { headers: headers(), cache: "no-store" });
+      $("profile-name").textContent = data.profile.name || "Guest";
+      $("profile-handle").textContent = data.profile.username ? "@" + data.profile.username : "Moviex Hub user";
+      $("profile-avatar").textContent = initials(data.profile.name || "G");
+      renderProfileStats(data.stats || {});
+      state.profileFavorites = data.favorites || [];
+      $("profile-favorite-count").textContent = state.profileFavorites.length;
+      $("profile-favorites").innerHTML = state.profileFavorites.map((movie) => movieCard(movie, false)).join("");
+      $("profile-empty").classList.toggle("hidden", state.profileFavorites.length > 0);
+      bindCards("profile-favorites");
+    } catch (error) {
+      $("profile-favorites").innerHTML = '<div class="empty-state"><p>' +
+        escapeHtml(error.message || "Profile লোড করা যায়নি।") + "</p></div>";
+    }
+    window.scrollTo(0, 0);
+  }
+  function addMayaMessage(text, role) {
+    const node = document.createElement("div");
+    node.className = "maya-message " + role;
+    node.textContent = text;
+    $("maya-messages").appendChild(node);
+    $("maya-messages").scrollTop = $("maya-messages").scrollHeight;
+  }
+  function renderMayaMovies(movies) {
+    $("maya-results").innerHTML = (movies || []).map((movie) => movieCard(movie, false)).join("");
+    bindCards("maya-results");
+  }
+  function showMaya() {
+    hideMainScreens();
+    mayaScreen.classList.remove("hidden");
+    document.querySelector(".topbar-title").textContent = "Maya AI";
+    window.scrollTo(0, 0);
+    $("maya-input").focus();
+  }
+  async function askMaya(text) {
+    addMayaMessage(text, "user");
+    $("maya-input").value = "";
+    const loading = document.createElement("div");
+    loading.className = "maya-message assistant loading";
+    loading.textContent = "Maya ভাবছে...";
+    $("maya-messages").appendChild(loading);
+    try {
+      const data = await api("/api/miniapp/maya", {
+        method: "POST", headers: headers(),
+        body: JSON.stringify({ message: text, history: state.mayaHistory })
+      });
+      loading.remove();
+      addMayaMessage(data.reply || "উত্তর পাওয়া যায়নি।", "assistant");
+      renderMayaMovies(data.movies || []);
+      state.mayaHistory.push({ role: "user", content: text }, { role: "assistant", content: data.reply || "" });
+      state.mayaHistory = state.mayaHistory.slice(-8);
+    } catch (error) {
+      loading.remove();
+      addMayaMessage(error.message || "Maya এখন উত্তর দিতে পারছে না।", "assistant");
+    }
   }
   function openDetail(movie) {
     if (!movie) return;
@@ -191,6 +280,8 @@
     state.detail = null;
     home.classList.add("hidden");
     detailScreen.classList.remove("hidden");
+    mayaScreen.classList.add("hidden");
+    profileScreen.classList.add("hidden");
     $("back-button").classList.remove("hidden");
     document.querySelector(".topbar-title").textContent = brandName;
     $("detail-poster").innerHTML = posterMarkup(movie, "detail-poster-image");
@@ -295,7 +386,10 @@
   $("comment-input").addEventListener("keydown", (event) => {
     if (event.key === "Enter") { event.preventDefault(); addComment(); }
   });
-  $("back-button").addEventListener("click", showHome);
+  $("back-button").addEventListener("click", () => {
+    showHome();
+    setActiveNav("home");
+  });
   $("search").addEventListener("input", (event) => {
     state.query = event.target.value.trim();
     renderHome();
@@ -303,6 +397,14 @@
   $("close-announcement").addEventListener("click", () => $("announcement").remove());
   $("trending-more").addEventListener("click", () => { state.query = ""; state.category = ""; renderHome(); $("all-section").scrollIntoView({ behavior: "smooth" }); });
   $("recent-more").addEventListener("click", () => { state.query = ""; state.category = ""; renderHome(); $("all-section").scrollIntoView({ behavior: "smooth" }); });
+  $("maya-form").addEventListener("submit", (event) => {
+    event.preventDefault();
+    const value = $("maya-input").value.trim();
+    if (value) askMaya(value);
+  });
+  document.querySelectorAll("[data-maya-prompt]").forEach((button) => {
+    button.addEventListener("click", () => askMaya(button.dataset.mayaPrompt));
+  });
   document.querySelectorAll("[data-close-modal]").forEach((button) => {
     button.addEventListener("click", () => hideModal(button.dataset.closeModal));
   });
@@ -314,11 +416,10 @@
       if (nav === "home") showHome();
       else if (nav === "search") { showHome(); $("search").focus(); window.scrollTo(0, 0); }
       else if (nav === "upcoming") {
-        home.classList.remove("hidden"); detailScreen.classList.add("hidden");
+        hideMainScreens(); home.classList.remove("hidden");
         $("back-button").classList.add("hidden"); renderUpcoming();
-      } else {
-        showToast(nav === "maya" ? "Maya AI শিগগিরই আসছে।" : "Profile ও My List শিগগিরই আসছে।");
-      }
+      } else if (nav === "maya") showMaya();
+      else if (nav === "profile") showProfile();
     });
   });
   loadConfig();

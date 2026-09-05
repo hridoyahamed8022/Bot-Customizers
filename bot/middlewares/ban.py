@@ -16,6 +16,7 @@ from aiogram.types import (
 
 from ..config import settings
 from ..db import db
+from ..handlers.common import watch_now_button
 
 
 def _remaining_text(expires_at: float | None) -> str:
@@ -39,9 +40,11 @@ async def _group_kb() -> InlineKeyboardMarkup | None:
     try:
         disc_url = await db.get_discussion_url()
         if disc_url:
-            return InlineKeyboardMarkup(inline_keyboard=[[
-                InlineKeyboardButton(text="📢 আমাদের গ্রুপে যোগাযোগ করুন", url=disc_url)
-            ]])
+            rows = [[InlineKeyboardButton(text="📢 আমাদের গ্রুপে যোগাযোগ করুন", url=disc_url)]]
+            watch = watch_now_button()
+            if watch:
+                rows.append([watch])
+            return InlineKeyboardMarkup(inline_keyboard=rows)
     except Exception:
         pass
     return None

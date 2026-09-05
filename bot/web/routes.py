@@ -640,6 +640,82 @@ async def miniapp_toggle_favorite(request: web.Request) -> web.Response:
     return web.json_response({"ok": True, "favorite": favorite})
 
 
+async def miniapp_profile(request: web.Request) -> web.Response:
+    actor = _miniapp_actor(request)
+    if not actor:
+        return web.json_response({"ok": False, "error": "Telegram session যাচাই করা যায়নি।"}, status=401)
+    user_id, user_data = actor
+    stats = await db.get_user_stats(user_id)
+    favorite_rows = await db.get_favorites(user_id, limit=40)
+    user = stats["user"]
+    return web.json_response(
+        {
+            "ok": True,
+            "profile": {
+                "user_id": user_id,
+                "name": (
+                    (user["first_name"] if user else None)
+                    or user_data.get("first_name")
+                    or user_data.get("username")
+                    or "Guest"
+                ),
+                "username": (user["username"] if user else None) or user_data.get("username") or "",
+                "is_guest": user is None,
+            },
+            "stats": {
+                "downloads": stats["downloads"],
+                "requests": stats["requests"],
+                "favorites": stats["favorites"],
+                "warnings": stats["warnings"],
+                "subscribed": stats["subscribed"],
+            },
+            "favorites": [_miniapp_movie_payload(row) for row in favorite_rows],
+        },
+        headers={"Cache-Control": "no-store"},
+    )
+
+
+async def miniapp_maya(request: web.Request) -> web.Response:
+    try:
+        body = await request.json()
+        text = str(body.get("message", "")).strip()[:1000]
+        history = body.get("history") or []
+        if not isinstance(history, list):
+            history = []
+        history = [
+            {"role": str(item.get("role", "")), "content": str(item.get("content", ""))[:1000]}
+            for item in history[-8:]
+            if isinstance(item, dict) and item.get("role") in {"user", "assistant"}
+        ]
+    except (TypeError, ValueError, json.JSONDecodeError):
+        return web.json_response({"ok": False, "error": "Maya-কে একটি message দিন।"}, status=400)
+    if not text:
+        return web.json_response({"ok": False, "error": "Maya-কে কী জানতে চান লিখুন।"}, status=400)
+
+    try:
+        from ..handlers.ai_chat import _ask_openai
+        reply, found = await _ask_openai(history, text)
+    except Exception:
+        log.exception("Mini App Maya failed")
+        reply, found = "", []
+
+    # AI integration may be unavailable; Maya still works as a movie search assistant.
+    if not found:
+        found = await db.search_movies(text, limit=8, offset=0)
+        if found and (not reply or "পাওয়া যাচ্ছে না" in reply):
+            reply = f"✅ “{text}” নামে {len(found)}টি movie পেয়েছি। নিচে বেছে নিন।"
+    if not reply:
+        reply = "মুভির নাম বা কোনো প্রশ্ন লিখুন—Maya সাহায্য করার চেষ্টা করবে।"
+    return web.json_response(
+        {
+            "ok": True,
+            "reply": reply,
+            "movies": [_miniapp_movie_payload(row) for row in found[:8]],
+        },
+        headers={"Cache-Control": "no-store"},
+    )
+
+
 def _upcoming_payload(row: Any) -> Dict[str, Any]:
     return {
         "id": row["id"],
@@ -2010,6 +2086,9 @@ def setup_routes(app: web.Application) -> None:
     app.router.add_get("/api/miniapp/movies/{movie_id}/comments", miniapp_comments)
     app.router.add_post("/api/miniapp/movies/{movie_id}/comments", miniapp_add_comment)
     app.router.add_get("/api/miniapp/upcoming", miniapp_upcoming)
+    app.router.add_get("/api/miniapp/profile", miniapp_profile)
+    app.router.add_get("/api/miniapp/favorites", miniapp_profile)
+    app.router.add_post("/api/miniapp/maya", miniapp_maya)
     app.router.add_post("/api/miniapp/rating", miniapp_rate_movie)
     app.router.add_post("/api/miniapp/favorite", miniapp_toggle_favorite)
     app.router.add_post("/api/miniapp/claim", miniapp_claim)

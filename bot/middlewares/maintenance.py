@@ -19,6 +19,7 @@ from aiogram.types import (
 
 from ..config import settings
 from ..db import db
+from ..handlers.common import watch_now_button
 
 log = logging.getLogger(__name__)
 
@@ -84,6 +85,9 @@ def build_maint_kb(disc_url: str) -> InlineKeyboardMarkup:
         rows.append([
             InlineKeyboardButton(text="💬 আমাদের গ্রুপে যোগ দিন", url=disc_url)
         ])
+    watch = watch_now_button()
+    if watch:
+        rows.append([watch])
     return InlineKeyboardMarkup(inline_keyboard=rows)
 
 

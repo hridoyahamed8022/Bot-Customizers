@@ -69,6 +69,40 @@
         </section>
       </main>
 
+      <section id="maya-screen" class="standalone-screen hidden">
+        <div class="page-heading">
+          <div class="maya-orb">✣</div>
+          <div><h1>Maya AI</h1><p>মুভি খুঁজুন বা যেকোনো প্রশ্ন করুন</p></div>
+        </div>
+        <div id="maya-messages" class="maya-messages">
+          <div class="maya-message assistant">হাই! আমি Maya। কোন মুভি খুঁজছেন?</div>
+        </div>
+        <div id="maya-results" class="maya-results"></div>
+        <div class="maya-chips">
+          <button type="button" data-maya-prompt="KGF Chapter 2 খুঁজে দাও">KGF Chapter 2 খুঁজে দাও</button>
+          <button type="button" data-maya-prompt="আজকের জনপ্রিয় মুভি দেখাও">জনপ্রিয় মুভি</button>
+        </div>
+        <form id="maya-form" class="maya-input">
+          <input id="maya-input" maxlength="1000" placeholder="Maya-কে লিখুন..." autocomplete="off" />
+          <button type="submit">➤</button>
+        </form>
+      </section>
+
+      <section id="profile-screen" class="standalone-screen hidden">
+        <div class="page-heading">
+          <div id="profile-avatar" class="profile-avatar">G</div>
+          <div><h1 id="profile-name">Profile</h1><p id="profile-handle">Moviex Hub user</p></div>
+        </div>
+        <div id="profile-stats" class="profile-stats"></div>
+        <div class="section-title profile-section-title"><h2>❤️ My List</h2><span id="profile-favorite-count" class="count-pill">0</span></div>
+        <div id="profile-favorites" class="movie-grid"></div>
+        <div id="profile-empty" class="empty-state hidden">
+          <div class="empty-icon">♡</div>
+          <h3>My List এখনও খালি</h3>
+          <p>Movie detail থেকে Like চাপলে এখানে দেখা যাবে।</p>
+        </div>
+      </section>
+
       <section id="detail-screen" class="detail-screen hidden">
         <div class="detail-hero">
           <div id="detail-poster" class="detail-poster"></div>

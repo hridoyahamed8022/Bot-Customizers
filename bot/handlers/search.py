@@ -19,6 +19,7 @@ from aiogram.utils.keyboard import InlineKeyboardBuilder
 
 from ..db import db
 from ..utils import esc, schedule_delete, MSG_TTL
+from .common import watch_now_button
 
 router = Router(name="search")
 log = logging.getLogger(__name__)
@@ -54,6 +55,9 @@ def verify_kb(channels) -> InlineKeyboardMarkup:
             kb.button(text=f"📢 {label}-এ জয়েন করুন", url=url)
     kb.button(text="✅ ভেরিফাই করুন", callback_data="verify:check")
     kb.button(text="❓ কেন জয়েন করতে হবে?", callback_data="ai:topic:verify")
+    watch = watch_now_button()
+    if watch:
+        kb.row(watch)
     kb.adjust(1)
     return kb.as_markup()
 
@@ -188,6 +192,9 @@ def _results_kb(rows, page: int, total: int,
         InlineKeyboardButton(text="📝 রিকোয়েস্ট", callback_data="req:start"),
         InlineKeyboardButton(text="🏠 হোম", callback_data="home"),
     )
+    watch = watch_now_button()
+    if watch:
+        kb.row(watch)
     if channel_btns:
         for btn in channel_btns:
             kb.row(btn)
@@ -212,6 +219,9 @@ def _no_results_kb(suggestions=None, query: str = "",
     kb.button(text="📝 এই মুভিটি রিকোয়েস্ট করুন", callback_data="req:from_search")
     kb.button(text="🔍 আবার সার্চ করুন", callback_data="search:start")
     kb.button(text="🏠 হোম", callback_data="home")
+    watch = watch_now_button()
+    if watch:
+        kb.row(watch)
     kb.adjust(1)
     if channel_btns:
         for btn in channel_btns:
@@ -312,6 +322,9 @@ async def _gate_search(message_or_cb, query: str, page: int = 0) -> None:
         kb = InlineKeyboardBuilder()
         kb.button(text="ℹ️ কীভাবে সার্চ করব?", callback_data="ai:topic:howto")
         kb.button(text="🏠 হোম", callback_data="home")
+        watch = watch_now_button()
+        if watch:
+            kb.row(watch)
         kb.adjust(2)
         if isinstance(message_or_cb, CallbackQuery):
             await message_or_cb.answer("ইংরেজিতে সার্চ করুন", show_alert=True)
@@ -383,6 +396,9 @@ async def cb_search_start(callback: CallbackQuery) -> None:
     kb = InlineKeyboardBuilder()
     kb.button(text="📝 রিকোয়েস্ট করুন", callback_data="req:start")
     kb.button(text="🏠 হোম", callback_data="home")
+    watch = watch_now_button()
+    if watch:
+        kb.row(watch)
     kb.adjust(2)
     try:
         await callback.message.edit_text(text, reply_markup=kb.as_markup())

@@ -14,6 +14,7 @@ from aiogram.utils.keyboard import InlineKeyboardBuilder
 
 from ..db import db
 from ..utils import esc, schedule_delete, MSG_TTL
+from .common import watch_now_button
 
 router = Router(name="user_profile")
 log = logging.getLogger(__name__)
@@ -68,6 +69,9 @@ async def _show_stats(target, user_id: int) -> None:
     kb.button(text="📥 ডাউনলোড ইতিহাস", callback_data="profile:history")
     kb.button(text="❤️ ফেভারিট লিস্ট", callback_data="fav:list")
     kb.button(text="🏠 হোম", callback_data="home")
+    watch = watch_now_button()
+    if watch:
+        kb.row(watch)
     kb.adjust(1)
 
     if isinstance(target, CallbackQuery):
@@ -123,6 +127,9 @@ async def _show_requests(target, user_id: int) -> None:
     kb.button(text="🎬 নতুন রিকোয়েস্ট", callback_data="req:start")
     kb.button(text="📊 আমার পরিসংখ্যান", callback_data="profile:stats")
     kb.button(text="🏠 হোম", callback_data="home")
+    watch = watch_now_button()
+    if watch:
+        kb.row(watch)
     kb.adjust(1)
 
     if isinstance(target, CallbackQuery):
@@ -177,6 +184,9 @@ async def _show_history(target, user_id: int) -> None:
     kb = InlineKeyboardBuilder()
     kb.button(text="📊 আমার পরিসংখ্যান", callback_data="profile:stats")
     kb.button(text="🏠 হোম", callback_data="home")
+    watch = watch_now_button()
+    if watch:
+        kb.row(watch)
     kb.adjust(2)
 
     if isinstance(target, CallbackQuery):

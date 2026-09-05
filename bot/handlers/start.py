@@ -20,6 +20,7 @@ from aiogram.utils.keyboard import InlineKeyboardBuilder
 from ..config import settings
 from ..db import db
 from ..utils import esc, schedule_delete, MSG_TTL
+from .common import watch_now_button
 
 router = Router(name="start")
 log = logging.getLogger(__name__)
@@ -63,11 +64,9 @@ async def get_home_text() -> str:
 
 def home_kb(popular=None) -> InlineKeyboardMarkup:
     kb = InlineKeyboardBuilder()
-    if settings.public_url:
-        kb.button(
-            text="🎬 মুভি লাইব্রেরি",
-            web_app=WebAppInfo(url=f"{settings.public_url.rstrip('/')}/miniapp/"),
-        )
+    watch = watch_now_button()
+    if watch:
+        kb.row(watch)
     kb.button(text="🔍 মুভি সার্চ করুন", callback_data="search:start")
     kb.button(text="🎬 মুভি রিকোয়েস্ট করুন", callback_data="req:start")
     kb.button(text="📊 জনপ্রিয় মুভি", callback_data="popular:show")
@@ -78,6 +77,9 @@ def home_kb(popular=None) -> InlineKeyboardMarkup:
 
 def new_user_kb(popular=None) -> InlineKeyboardMarkup:
     kb = InlineKeyboardBuilder()
+    watch = watch_now_button()
+    if watch:
+        kb.row(watch)
     if popular:
         for r in popular:
             emoji = {"video": "🎬", "document": "📁"}.get(r["file_type"], "🎥")
@@ -218,6 +220,9 @@ async def cb_popular(callback: CallbackQuery) -> None:
         )
     kb.adjust(1)
     kb.row(InlineKeyboardButton(text="🏠 হোম", callback_data="home"))
+    watch = watch_now_button()
+    if watch:
+        kb.row(watch)
 
     text = (
         "🔥 <b>জনপ্রিয় মুভি</b>\n"
@@ -310,6 +315,9 @@ def ai_menu_kb() -> InlineKeyboardMarkup:
         kb.button(text=t["title"], callback_data=f"ai:topic:{key}")
     kb.button(text="💬 সিনে-বাবুকে সরাসরি জিজ্ঞেস করুন", callback_data="ai:chat:start")
     kb.button(text="🏠 হোম", callback_data="home")
+    watch = watch_now_button()
+    if watch:
+        kb.row(watch)
     kb.adjust(1)
     return kb.as_markup()
 
@@ -321,6 +329,9 @@ def ai_topic_kb(topic_key: str = "") -> InlineKeyboardMarkup:
     kb.button(text="🔍 সার্চ করুন", callback_data="search:start")
     kb.button(text="🎬 রিকোয়েস্ট করুন", callback_data="req:start")
     kb.button(text="🏠 হোম", callback_data="home")
+    watch = watch_now_button()
+    if watch:
+        kb.row(watch)
     kb.adjust(2)
     return kb.as_markup()
 

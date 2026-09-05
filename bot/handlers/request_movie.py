@@ -13,6 +13,7 @@ from aiogram.utils.keyboard import InlineKeyboardBuilder
 
 from ..db import db
 from ..utils import esc, schedule_delete, MSG_TTL
+from .common import watch_now_button
 
 router = Router(name="request_movie")
 log = logging.getLogger(__name__)
@@ -26,6 +27,9 @@ class RequestState(StatesGroup):
 def _cancel_kb():
     kb = InlineKeyboardBuilder()
     kb.button(text="❌ বাতিল", callback_data="req:cancel")
+    watch = watch_now_button()
+    if watch:
+        kb.row(watch)
     return kb.as_markup()
 
 
@@ -72,6 +76,9 @@ async def cb_req_from_search(callback: CallbackQuery, state: FSMContext) -> None
     kb.button(text="✅ হ্যাঁ, এটাই রিকোয়েস্ট করুন", callback_data="req:skip_note")
     kb.button(text="✏️ নাম বদলাই", callback_data="req:change_title")
     kb.button(text="❌ বাতিল", callback_data="req:cancel")
+    watch = watch_now_button()
+    if watch:
+        kb.row(watch)
     kb.adjust(1)
 
     text = (
