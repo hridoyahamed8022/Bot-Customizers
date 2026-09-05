@@ -18,6 +18,7 @@
   <nav>
     <a href="/" {% if request.path == '/' %}class="active"{% endif %}>ড্যাশবোর্ড</a>
     <a href="/movies" {% if request.path.startswith('/movies') %}class="active"{% endif %}>মুভি</a>
+    <a href="/upcoming" {% if request.path.startswith('/upcoming') %}class="active"{% endif %}>আপকামিং</a>
     <a href="/post" {% if request.path.startswith('/post') %}class="active"{% endif %}>পোস্ট</a>
     <a href="/broadcast" {% if request.path.startswith('/broadcast') %}class="active"{% endif %}>ব্রডকাস্ট</a>
     <a href="/requests" {% if request.path.startswith('/requests') %}class="active"{% endif %}>রিকোয়েস্ট{% if pending_req_count > 0 %} <span class="nav-badge">{{ pending_req_count }}</span>{% endif %}</a>

@@ -10,8 +10,8 @@
   }
 
   const state = {
-    movies: [], recent: [], trending: [], category: "", query: "",
-    selected: null, adUrl: "", detail: null, loading: false
+    movies: [], recent: [], trending: [], upcoming: [], categories: [],
+    category: "", query: "", selected: null, detail: null, adUrl: ""
   };
   const $ = (id) => document.getElementById(id);
   const home = $("home-screen");
@@ -27,10 +27,11 @@
     return String(title || "M").trim().split(/\s+/).slice(0, 2)
       .map((part) => part[0] || "").join("").toUpperCase();
   }
-  function posterMarkup(movie, extraClass) {
-    const fallback = '<div class="poster-fallback"><span>' + escapeHtml(initials(movie.title)) + "</span></div>";
-    const image = movie.poster_url
-      ? '<img src="' + escapeHtml(movie.poster_url) + '" alt="' + escapeHtml(movie.title) + '" loading="lazy" onerror="this.style.display=\'none\'">'
+  function posterMarkup(item, extraClass) {
+    const fallback = '<div class="poster-fallback"><span>' + escapeHtml(initials(item.title)) + "</span></div>";
+    const image = item.poster_url
+      ? '<img src="' + escapeHtml(item.poster_url) + '" alt="' + escapeHtml(item.title) +
+        '" loading="lazy" onerror="this.style.display=\'none\'">'
       : "";
     return '<div class="poster-media ' + (extraClass || "") + '">' + image + fallback + "</div>";
   }
@@ -38,10 +39,10 @@
     return "◉ " + (hits > 999 ? (hits / 1000).toFixed(1) + "k" : hits || 0);
   }
   function filtered(items) {
-    const q = state.query.toLowerCase();
-    return items.filter((movie) =>
-      (!state.category || movie.category === state.category) &&
-      (!q || movie.title.toLowerCase().includes(q)));
+    const query = state.query.toLowerCase();
+    return items.filter((item) =>
+      (!state.category || item.category === state.category) &&
+      (!query || item.title.toLowerCase().includes(query)));
   }
   function showToast(message) {
     toast.textContent = message;
@@ -61,8 +62,8 @@
     return data;
   }
 
-  function renderCategories(items) {
-    const all = [{ name: "", count: state.movies.length }].concat(items || []);
+  function renderCategories() {
+    const all = [{ name: "", count: state.movies.length }].concat(state.categories);
     $("categories").innerHTML = all.map((item, index) => {
       const active = (!state.category && index === 0) || state.category === item.name;
       return '<button type="button" class="' + (active ? "active" : "") + '" data-category="' +
@@ -75,7 +76,7 @@
       });
     });
   }
-  function card(movie, compact) {
+  function movieCard(movie, compact) {
     return '<button type="button" class="movie-card ' + (compact ? "compact" : "") + '" data-id="' + movie.id + '">' +
       '<div class="poster">' + posterMarkup(movie) +
       '<span class="hits">' + formatHits(movie.hits) + "</span>" +
@@ -83,40 +84,71 @@
       '<div class="movie-info"><span class="movie-avatar">MB</span><div><h3>' +
       escapeHtml(movie.title) + "</h3><p>" + escapeHtml(movie.category || "মুভি") + "</p></div></div></button>";
   }
+  function upcomingCard(item) {
+    return '<button type="button" class="movie-card upcoming-card" data-upcoming-id="' + item.id + '">' +
+      '<div class="poster">' + posterMarkup(item) +
+      '<span class="release-badge">' + escapeHtml(item.release_date || "Coming soon") + "</span></div>" +
+      '<div class="movie-info"><span class="movie-avatar">MB</span><div><h3>' +
+      escapeHtml(item.title) + "</h3><p>" + escapeHtml(item.category || "Upcoming") + "</p></div></div></button>";
+  }
   function bindCards(container) {
     $(container).querySelectorAll(".movie-card").forEach((button) => {
-      button.addEventListener("click", () => openDetail(state.movies.find((movie) => movie.id === Number(button.dataset.id))));
+      button.addEventListener("click", () => {
+        if (button.dataset.upcomingId) {
+          const item = state.upcoming.find((entry) => entry.id === Number(button.dataset.upcomingId));
+          if (item) showToast(item.release_date ? item.title + " · " + item.release_date : item.title + " · Coming soon");
+          return;
+        }
+        openDetail(state.movies.find((movie) => movie.id === Number(button.dataset.id)));
+      });
     });
   }
   function renderHome() {
-    renderCategories(state.categories);
+    renderCategories();
     const currentTrending = filtered(state.trending);
     const currentRecent = filtered(state.recent);
     const currentAll = filtered(state.movies);
     const searching = Boolean(state.query || state.category);
     $("trending-section").classList.toggle("hidden", searching);
     $("recent-section").classList.toggle("hidden", searching);
+    $("upcoming-section").classList.add("hidden");
+    $("all-section").classList.remove("hidden");
     $("all-heading").textContent = searching ? "Search Results" : "All Movies";
-    $("trending-strip").innerHTML = currentTrending.map((movie) => card(movie, true)).join("");
-    $("recent-grid").innerHTML = currentRecent.map((movie) => card(movie, false)).join("");
-    $("movie-grid").innerHTML = currentAll.map((movie) => card(movie, false)).join("");
+    $("trending-strip").innerHTML = currentTrending.map((movie) => movieCard(movie, true)).join("");
+    $("recent-grid").innerHTML = currentRecent.map((movie) => movieCard(movie, false)).join("");
+    $("movie-grid").innerHTML = currentAll.map((movie) => movieCard(movie, false)).join("");
     $("count").textContent = currentAll.length + "টি";
     $("empty").classList.toggle("hidden", currentAll.length > 0);
     bindCards("trending-strip");
     bindCards("recent-grid");
     bindCards("movie-grid");
   }
+  function renderUpcoming() {
+    $("trending-section").classList.add("hidden");
+    $("recent-section").classList.add("hidden");
+    $("all-section").classList.add("hidden");
+    $("upcoming-section").classList.remove("hidden");
+    $("upcoming-count").textContent = state.upcoming.length + "টি";
+    $("upcoming-grid").innerHTML = state.upcoming.map(upcomingCard).join("");
+    $("upcoming-empty").classList.toggle("hidden", state.upcoming.length > 0);
+    bindCards("upcoming-grid");
+    window.scrollTo(0, 0);
+  }
   async function loadMovies() {
     try {
-      const data = await api("/api/miniapp/movies?limit=1200", { cache: "no-store" });
-      state.movies = data.movies || [];
-      state.recent = data.recent || [];
-      state.trending = data.trending || [];
-      state.categories = data.categories || [];
+      const [movies, upcoming] = await Promise.all([
+        api("/api/miniapp/movies?limit=1200", { cache: "no-store" }),
+        api("/api/miniapp/upcoming", { cache: "no-store" })
+      ]);
+      state.movies = movies.movies || [];
+      state.recent = movies.recent || [];
+      state.trending = movies.trending || [];
+      state.categories = movies.categories || [];
+      state.upcoming = upcoming.upcoming || [];
       renderHome();
     } catch (error) {
       $("count").textContent = "সমস্যা";
-      showToast(error.message || "মুভি লোড করা যায়নি।");
+      showToast(error.message || "ডাটা লোড করা যায়নি।");
     }
   }
   function showModal(id) { $(id).classList.remove("hidden"); }
@@ -125,16 +157,18 @@
     home.classList.remove("hidden");
     detailScreen.classList.add("hidden");
     $("back-button").classList.add("hidden");
-    document.querySelector(".topbar-title").textContent = "Movies Link BD";
+    document.querySelector(".topbar-title").textContent = "Moviex Hub";
+    renderHome();
     window.scrollTo(0, 0);
   }
   function openDetail(movie) {
     if (!movie) return;
     state.selected = movie;
+    state.detail = null;
     home.classList.add("hidden");
     detailScreen.classList.remove("hidden");
     $("back-button").classList.remove("hidden");
-    document.querySelector(".topbar-title").textContent = "Movies Link BD";
+    document.querySelector(".topbar-title").textContent = "Moviex Hub";
     $("detail-poster").innerHTML = posterMarkup(movie, "detail-poster-image");
     $("detail-category").textContent = movie.category || "মুভি";
     $("detail-title").textContent = movie.title;
@@ -142,14 +176,16 @@
     $("detail-caption").textContent = movie.caption || "মুভিটি পেতে Download বাটনে চাপুন।";
     $("favorite-button").innerHTML = "♡ <span>Like</span>";
     renderStars(0);
-    window.scrollTo(0, 0);
+    renderComments([]);
     api("/api/miniapp/movies/" + movie.id, { headers: headers(), cache: "no-store" })
       .then((data) => {
         state.detail = data;
         $("favorite-button").innerHTML = (data.favorite ? "♥" : "♡") + " <span>Like</span>";
         renderStars(data.user_rating || 0, data.rating);
-      })
-      .catch(() => {});
+      }).catch(() => {});
+    api("/api/miniapp/movies/" + movie.id + "/comments", { cache: "no-store" })
+      .then((data) => renderComments(data.comments || [])).catch(() => {});
+    window.scrollTo(0, 0);
   }
   function renderStars(selected, rating) {
     $("rating-stars").innerHTML = [1, 2, 3, 4, 5].map((number) =>
@@ -158,6 +194,13 @@
     $("rating-stars").querySelectorAll("button").forEach((button) => {
       button.addEventListener("click", () => rateMovie(Number(button.dataset.rating)));
     });
+  }
+  function renderComments(comments) {
+    $("comments-heading").textContent = "Comments (" + comments.length + ")";
+    $("comments-list").innerHTML = comments.length ? comments.map((item) =>
+      '<div class="comment-item"><strong>' + escapeHtml(item.name) + '</strong><p>' +
+      escapeHtml(item.comment) + "</p></div>").join("") :
+      '<p class="no-comments">এখনও কোনো comment নেই। প্রথম comment করুন!</p>';
   }
   async function rateMovie(rating) {
     if (!tg || !tg.initData) return showToast("বটের ভেতর থেকে Mini App খুলে rating দিন।");
@@ -169,6 +212,23 @@
       renderStars(rating, { average: data.average, count: data.count });
       showToast("আপনার rating সংরক্ষণ হয়েছে।");
     } catch (error) { showToast(error.message); }
+  }
+  async function addComment() {
+    const input = $("comment-input");
+    const comment = input.value.trim();
+    if (!comment || !state.selected) return;
+    if (!tg || !tg.initData) return showToast("বটের ভেতর থেকে comment করুন।");
+    $("comment-button").disabled = true;
+    try {
+      await api("/api/miniapp/movies/" + state.selected.id + "/comments", {
+        method: "POST", headers: headers(), body: JSON.stringify({ movie_id: state.selected.id, comment })
+      });
+      input.value = "";
+      const data = await api("/api/miniapp/movies/" + state.selected.id + "/comments", { cache: "no-store" });
+      renderComments(data.comments || []);
+      showToast("Comment যোগ হয়েছে।");
+    } catch (error) { showToast(error.message); }
+    finally { $("comment-button").disabled = false; }
   }
   $("favorite-button").addEventListener("click", async () => {
     if (!state.selected) return;
@@ -199,11 +259,8 @@
       state.adUrl = data.ad_url;
       hideModal("quality-modal");
       showModal("unlock-modal");
-    } catch (error) {
-      showToast(error.message);
-    } finally {
-      $("quality-button").disabled = false;
-    }
+    } catch (error) { showToast(error.message); }
+    finally { $("quality-button").disabled = false; }
   });
   $("open-ad-button").addEventListener("click", () => {
     if (!state.adUrl) return showToast("লিংক তৈরি হয়নি।");
@@ -211,6 +268,10 @@
     showToast("Sending File... ১০ সেকেন্ড পরে bot inbox দেখুন।");
     if (tg && tg.openLink) tg.openLink(state.adUrl);
     else window.location.href = state.adUrl;
+  });
+  $("comment-button").addEventListener("click", addComment);
+  $("comment-input").addEventListener("keydown", (event) => {
+    if (event.key === "Enter") { event.preventDefault(); addComment(); }
   });
   $("back-button").addEventListener("click", showHome);
   $("search").addEventListener("input", (event) => {
@@ -230,7 +291,12 @@
       const nav = button.dataset.nav;
       if (nav === "home") showHome();
       else if (nav === "search") { showHome(); $("search").focus(); window.scrollTo(0, 0); }
-      else showToast(nav === "upcoming" ? "Upcoming movies শিগগিরই আসছে।" : nav === "maya" ? "Maya AI শিগগিরই আসছে।" : "Profile ও My List শিগগিরই আসছে।");
+      else if (nav === "upcoming") {
+        home.classList.remove("hidden"); detailScreen.classList.add("hidden");
+        $("back-button").classList.add("hidden"); renderUpcoming();
+      } else {
+        showToast(nav === "maya" ? "Maya AI শিগগিরই আসছে।" : "Profile ও My List শিগগিরই আসছে।");
+      }
     });
   });
   loadMovies();

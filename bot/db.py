@@ -40,6 +40,7 @@ CREATE TABLE IF NOT EXISTS movies (
     title             TEXT NOT NULL,
     category          TEXT NOT NULL DEFAULT 'মুভি',
     poster_url        TEXT,
+    poster_file_id    TEXT,
     caption           TEXT,
     source_chat_id    INTEGER,
     source_message_id INTEGER,
@@ -172,6 +173,16 @@ CREATE TABLE IF NOT EXISTS ratings (
     UNIQUE(user_id, movie_id)
 );
 
+CREATE TABLE IF NOT EXISTS movie_comments (
+    id          INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id     INTEGER NOT NULL,
+    display_name TEXT,
+    movie_id    INTEGER NOT NULL,
+    comment     TEXT NOT NULL,
+    created_at  REAL NOT NULL
+);
+CREATE INDEX IF NOT EXISTS movie_comments_movie ON movie_comments(movie_id, created_at DESC);
+
 CREATE TABLE IF NOT EXISTS subscriptions (
     user_id     INTEGER PRIMARY KEY,
     active      INTEGER NOT NULL DEFAULT 1,
@@ -203,6 +214,17 @@ CREATE TABLE IF NOT EXISTS ad_tokens (
     used        INTEGER NOT NULL DEFAULT 0
 );
 CREATE INDEX IF NOT EXISTS ad_tokens_expires ON ad_tokens(expires_at);
+
+CREATE TABLE IF NOT EXISTS upcoming_movies (
+    id            INTEGER PRIMARY KEY AUTOINCREMENT,
+    title         TEXT NOT NULL,
+    category      TEXT NOT NULL DEFAULT 'Upcoming',
+    release_date  TEXT,
+    poster_url    TEXT,
+    description   TEXT,
+    created_at    REAL NOT NULL
+);
+CREATE INDEX IF NOT EXISTS upcoming_created_at ON upcoming_movies(created_at DESC);
 
 CREATE TABLE IF NOT EXISTS movie_notifications (
     id          INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -241,6 +263,7 @@ class Database:
         await self._add_column_if_missing("movie_requests", "notified", "INTEGER NOT NULL DEFAULT 0")
         await self._add_column_if_missing("movies", "category", "TEXT NOT NULL DEFAULT 'মুভি'")
         await self._add_column_if_missing("movies", "poster_url", "TEXT")
+        await self._add_column_if_missing("movies", "poster_file_id", "TEXT")
         await self._add_column_if_missing("ad_tokens", "wait_seconds", "INTEGER NOT NULL DEFAULT 30")
         await self._conn.commit()
         log.info("SQLite ready at %s", self.path)
@@ -478,6 +501,7 @@ class Database:
                 UPDATE movies SET
                     file_id=?, file_type=?, file_name=?, mime_type=?,
                     size_bytes=?, duration=?, title=?, caption=?,
+                    poster_file_id=COALESCE(?, poster_file_id),
                     source_chat_id=?, source_message_id=?
                 WHERE file_unique_id=?
                 """,
@@ -485,6 +509,7 @@ class Database:
                     movie["file_id"], movie["file_type"], movie.get("file_name"),
                     movie.get("mime_type"), movie.get("size_bytes", 0) or 0,
                     movie.get("duration", 0) or 0, movie["title"], movie.get("caption") or "",
+                    movie.get("poster_file_id"),
                     movie.get("source_chat_id"), movie.get("source_message_id"),
                     movie["file_unique_id"],
                 ),
@@ -493,15 +518,16 @@ class Database:
         await self.execute(
             """
             INSERT INTO movies(file_unique_id, file_id, file_type, file_name,
-                               mime_type, size_bytes, duration, title, caption,
+                               mime_type, size_bytes, duration, title, caption, poster_file_id,
                                source_chat_id, source_message_id, added_at)
-            VALUES(?,?,?,?,?,?,?,?,?,?,?,?)
+            VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?)
             """,
             (
                 movie["file_unique_id"], movie["file_id"], movie["file_type"],
                 movie.get("file_name"), movie.get("mime_type"),
                 movie.get("size_bytes", 0) or 0, movie.get("duration", 0) or 0,
                 movie["title"], movie.get("caption") or "",
+                movie.get("poster_file_id"),
                 movie.get("source_chat_id"), movie.get("source_message_id"), time.time(),
             ),
         )
@@ -595,6 +621,49 @@ class Database:
         return await self.fetch_all(
             "SELECT * FROM movies ORDER BY hits DESC, added_at DESC LIMIT ?", (limit,)
         )
+
+    async def set_movie_poster_file_id(self, movie_id: int, poster_file_id: str) -> None:
+        await self.execute(
+            "UPDATE movies SET poster_file_id=? WHERE id=?",
+            (poster_file_id, movie_id),
+        )
+
+    # ------------------------------------------------------------------ #
+    # upcoming movies
+    # ------------------------------------------------------------------ #
+    async def list_upcoming_movies(self, limit: int = 100) -> List[aiosqlite.Row]:
+        return await self.fetch_all(
+            "SELECT * FROM upcoming_movies ORDER BY "
+            "CASE WHEN release_date IS NULL OR release_date='' THEN 1 ELSE 0 END, "
+            "release_date ASC, created_at DESC LIMIT ?",
+            (limit,),
+        )
+
+    async def get_upcoming_movie(self, upcoming_id: int) -> Optional[aiosqlite.Row]:
+        return await self.fetch_one("SELECT * FROM upcoming_movies WHERE id=?", (upcoming_id,))
+
+    async def add_upcoming_movie(
+        self,
+        title: str,
+        category: str,
+        release_date: str,
+        poster_url: str,
+        description: str,
+    ) -> int:
+        assert self._conn is not None
+        cur = await self._conn.execute(
+            """
+            INSERT INTO upcoming_movies(title, category, release_date, poster_url, description, created_at)
+            VALUES(?,?,?,?,?,?)
+            """,
+            (title.strip(), category.strip() or "Upcoming", release_date.strip(),
+             poster_url.strip(), description.strip(), time.time()),
+        )
+        await self._conn.commit()
+        return int(cur.lastrowid)
+
+    async def delete_upcoming_movie(self, upcoming_id: int) -> None:
+        await self.execute("DELETE FROM upcoming_movies WHERE id=?", (upcoming_id,))
 
     async def suggest_similar(self, query: str, limit: int = 3) -> List[aiosqlite.Row]:
         """কোনো রেজাল্ট না পেলে শব্দ ভেঙে কাছাকাছি মুভি খোঁজা।"""
@@ -913,6 +982,25 @@ class Database:
             "SELECT rating FROM ratings WHERE user_id=? AND movie_id=?", (user_id, movie_id)
         )
         return int(row["rating"]) if row else None
+
+    async def list_movie_comments(self, movie_id: int, limit: int = 30) -> List[aiosqlite.Row]:
+        return await self.fetch_all(
+            "SELECT id, user_id, display_name, comment, created_at "
+            "FROM movie_comments WHERE movie_id=? ORDER BY created_at DESC LIMIT ?",
+            (movie_id, max(1, min(100, limit))),
+        )
+
+    async def add_movie_comment(
+        self, user_id: int, display_name: str, movie_id: int, comment: str
+    ) -> int:
+        assert self._conn is not None
+        cur = await self._conn.execute(
+            "INSERT INTO movie_comments(user_id, display_name, movie_id, comment, created_at) "
+            "VALUES(?,?,?,?,?)",
+            (user_id, display_name.strip()[:80] or "Movie fan", movie_id, comment.strip()[:500], time.time()),
+        )
+        await self._conn.commit()
+        return int(cur.lastrowid)
 
     # ------------------------------------------------------------------ #
     # subscriptions — নতুন মুভি নোটিফিকেশন (#13)

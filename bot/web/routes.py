@@ -4,6 +4,8 @@ from __future__ import annotations
 import asyncio
 import hashlib
 import hmac
+import html
+import io
 import json
 import logging
 import time
@@ -360,8 +362,8 @@ async def movie_edit_save(request: web.Request) -> web.Response:
 # ──────────────────────────────────────────────────────────────── #
 # Telegram Mini App
 # ──────────────────────────────────────────────────────────────── #
-def _miniapp_user_id(request: web.Request) -> Optional[int]:
-    """Validate Telegram WebApp initData and return its user id."""
+def _miniapp_user_profile(request: web.Request) -> Optional[Tuple[int, Dict[str, Any]]]:
+    """Validate Telegram WebApp initData and return the trusted user profile."""
     raw = request.headers.get("X-Telegram-Init-Data", "").strip()
     if not raw:
         return None
@@ -382,9 +384,14 @@ def _miniapp_user_id(request: web.Request) -> Optional[int]:
             return None
         user = json.loads(values.get("user", "{}"))
         user_id = int(user.get("id", 0))
-        return user_id or None
+        return (user_id, user) if user_id else None
     except (TypeError, ValueError, json.JSONDecodeError):
         return None
+
+
+def _miniapp_user_id(request: web.Request) -> Optional[int]:
+    profile = _miniapp_user_profile(request)
+    return profile[0] if profile else None
 
 
 async def miniapp_page(request: web.Request) -> web.FileResponse:
@@ -396,7 +403,7 @@ def _miniapp_movie_payload(row: Any) -> Dict[str, Any]:
         "id": row["id"],
         "title": row["title"],
         "category": row["category"] or "মুভি",
-        "poster_url": row["poster_url"] or "",
+        "poster_url": row["poster_url"] or f"/api/miniapp/posters/{row['id']}",
         "caption": row["caption"] or "",
         "file_type": row["file_type"],
         "file_name": row["file_name"] or "",
@@ -405,6 +412,82 @@ def _miniapp_movie_payload(row: Any) -> Dict[str, Any]:
         "duration": int(row["duration"] or 0),
         "added_at": float(row["added_at"] or 0),
     }
+
+
+async def miniapp_poster(request: web.Request) -> web.Response:
+    """Serve a Telegram thumbnail without exposing the bot token to the browser."""
+    try:
+        movie_id = int(request.match_info["movie_id"])
+    except (KeyError, TypeError, ValueError):
+        return web.Response(status=404)
+    movie = await db.get_movie(movie_id)
+    if not movie:
+        return web.Response(status=404)
+
+    poster_file_id = movie["poster_file_id"]
+    bot = request.app["bot"]
+
+    # Backfill old indexed movies from their original message thumbnail. This
+    # runs only when a poster is actually viewed and caches the file_id.
+    if not poster_file_id and movie["file_type"] != "photo":
+        try:
+            if settings.admin_chat_id and movie["source_chat_id"] and movie["source_message_id"]:
+                forwarded = await bot.forward_message(
+                    chat_id=settings.admin_chat_id,
+                    from_chat_id=movie["source_chat_id"],
+                    message_id=movie["source_message_id"],
+                    disable_notification=True,
+                )
+                media = getattr(forwarded, "video", None) or getattr(forwarded, "document", None)
+                if media:
+                    thumbnail = getattr(media, "thumbnail", None)
+                    poster_file_id = getattr(thumbnail, "file_id", None)
+                try:
+                    await bot.delete_message(settings.admin_chat_id, forwarded.message_id)
+                except Exception:
+                    pass
+                if poster_file_id:
+                    await db.set_movie_poster_file_id(movie_id, poster_file_id)
+        except Exception:
+            log.exception("Could not backfill poster thumbnail for movie %s", movie_id)
+
+    if not poster_file_id and movie["file_type"] == "photo":
+        poster_file_id = movie["file_id"]
+    if not poster_file_id:
+        # Some old Telegram posts have no thumbnail at all. Return a real
+        # image response so the UI never logs a broken-image 404.
+        title = html.escape(str(movie["title"] or "Moviex Hub"))[:42]
+        initials = html.escape("".join(part[:1] for part in str(movie["title"] or "MB").split()[:2]).upper())
+        svg = (
+            '<svg xmlns="http://www.w3.org/2000/svg" width="720" height="420" viewBox="0 0 720 420">'
+            '<defs><linearGradient id="g" x1="0" y1="0" x2="1" y2="1">'
+            '<stop offset="0" stop-color="#402080"/><stop offset=".58" stop-color="#e63f7d"/>'
+            '<stop offset="1" stop-color="#10243d"/></linearGradient></defs>'
+            '<rect width="720" height="420" fill="url(#g)"/>'
+            f'<text x="36" y="320" fill="#fff" opacity=".9" font-size="86" font-family="Arial" font-weight="700">{initials}</text>'
+            f'<text x="36" y="370" fill="#fff" opacity=".72" font-size="20" font-family="Arial">{title}</text>'
+            "</svg>"
+        )
+        return web.Response(
+            body=svg.encode(), content_type="image/svg+xml",
+            headers={"Cache-Control": "public, max-age=86400"},
+        )
+
+    try:
+        file_info = await bot.get_file(poster_file_id)
+        output = io.BytesIO()
+        await bot.download_file(file_info.file_path, output)
+        data = output.getvalue()
+        if not data:
+            return web.Response(status=404)
+        return web.Response(
+            body=data,
+            content_type="image/jpeg",
+            headers={"Cache-Control": "public, max-age=86400"},
+        )
+    except Exception:
+        log.exception("Could not download poster thumbnail for movie %s", movie_id)
+        return web.Response(status=404)
 
 
 async def miniapp_movies(request: web.Request) -> web.Response:
@@ -506,6 +589,145 @@ async def miniapp_toggle_favorite(request: web.Request) -> web.Response:
     return web.json_response({"ok": True, "favorite": favorite})
 
 
+def _upcoming_payload(row: Any) -> Dict[str, Any]:
+    return {
+        "id": row["id"],
+        "title": row["title"],
+        "category": row["category"] or "Upcoming",
+        "release_date": row["release_date"] or "",
+        "poster_url": row["poster_url"] or "",
+        "description": row["description"] or "",
+    }
+
+
+async def miniapp_upcoming(request: web.Request) -> web.Response:
+    rows = await db.list_upcoming_movies(100)
+    return web.json_response(
+        {"ok": True, "upcoming": [_upcoming_payload(row) for row in rows]},
+        headers={"Cache-Control": "no-store"},
+    )
+
+
+async def miniapp_comments(request: web.Request) -> web.Response:
+    try:
+        movie_id = int(request.match_info["movie_id"])
+    except (KeyError, TypeError, ValueError):
+        return web.json_response({"ok": False, "error": "মুভিটি পাওয়া যায়নি।"}, status=404)
+    if not await db.get_movie(movie_id):
+        return web.json_response({"ok": False, "error": "মুভিটি পাওয়া যায়নি।"}, status=404)
+    rows = await db.list_movie_comments(movie_id)
+    return web.json_response(
+        {
+            "ok": True,
+            "comments": [
+                {
+                    "name": row["display_name"] or "Movie fan",
+                    "comment": row["comment"],
+                    "created_at": float(row["created_at"] or 0),
+                }
+                for row in rows
+            ],
+        },
+        headers={"Cache-Control": "no-store"},
+    )
+
+
+async def miniapp_add_comment(request: web.Request) -> web.Response:
+    profile = _miniapp_user_profile(request)
+    if not profile:
+        return web.json_response({"ok": False, "error": "Telegram থেকে Mini App খুলে comment করুন।"}, status=401)
+    user_id, user = profile
+    try:
+        body = await request.json()
+        movie_id = int(body.get("movie_id", 0))
+        comment = str(body.get("comment", "")).strip()
+    except (TypeError, ValueError, json.JSONDecodeError):
+        return web.json_response({"ok": False, "error": "Comment সঠিক নয়।"}, status=400)
+    if not comment or len(comment) > 500:
+        return web.json_response({"ok": False, "error": "Comment ১ থেকে ৫০০ অক্ষরের মধ্যে দিন।"}, status=400)
+    if not await db.get_movie(movie_id):
+        return web.json_response({"ok": False, "error": "মুভিটি পাওয়া যায়নি।"}, status=404)
+    display_name = user.get("first_name") or user.get("username") or "Movie fan"
+    await db.add_movie_comment(user_id, display_name, movie_id, comment)
+    return web.json_response({"ok": True, "name": display_name, "comment": comment})
+
+
+# ──────────────────────────────────────────────────────────────── #
+# Upcoming admin manager
+# ──────────────────────────────────────────────────────────────── #
+@require_admin
+async def upcoming_page(request: web.Request) -> web.Response:
+    rows = await db.list_upcoming_movies(100)
+    channels = await db.list_channels()
+    return aiohttp_jinja2.render_template(
+        "upcoming.html",
+        request,
+        {
+            "upcoming": rows,
+            "channels": channels,
+            "request_group_id": settings.request_group_id,
+            "flash": _read_flash(request),
+        },
+    )
+
+
+@require_admin
+async def upcoming_add(request: web.Request) -> web.Response:
+    data = await request.post()
+    title = (data.get("title") or "").strip()
+    if not title:
+        return _js_redirect("/upcoming" + _flash(request, "শিরোনাম দিতে হবে।", "err"))
+    await db.add_upcoming_movie(
+        title=title,
+        category=(data.get("category") or "Upcoming").strip(),
+        release_date=(data.get("release_date") or "").strip(),
+        poster_url=(data.get("poster_url") or "").strip(),
+        description=(data.get("description") or "").strip(),
+    )
+    await db.log_event("upcoming_add", {"title": title, "by": request["user_id"]})
+    return _js_redirect("/upcoming" + _flash(request, "✅ Upcoming movie যোগ হয়েছে।", "ok"))
+
+
+@require_admin
+async def upcoming_delete(request: web.Request) -> web.Response:
+    data = await request.post()
+    try:
+        upcoming_id = int(data.get("id", "0"))
+    except (TypeError, ValueError):
+        return _js_redirect("/upcoming")
+    await db.delete_upcoming_movie(upcoming_id)
+    return _js_redirect("/upcoming" + _flash(request, "Upcoming movie মুছে ফেলা হয়েছে।", "ok"))
+
+
+@require_admin
+async def upcoming_post(request: web.Request) -> web.Response:
+    data = await request.post()
+    try:
+        upcoming_id = int(data.get("id", "0"))
+        chat_id = int(data.get("chat_id") or settings.request_group_id or 0)
+    except (TypeError, ValueError):
+        return _js_redirect("/upcoming" + _flash(request, "সঠিক chat ID দিন।", "err"))
+    item = await db.get_upcoming_movie(upcoming_id)
+    if not item or not chat_id:
+        return _js_redirect("/upcoming" + _flash(request, "Upcoming movie বা chat ID পাওয়া যায়নি।", "err"))
+    bot = request.app["bot"]
+    caption = f"🎬 <b>{esc(item['title'])}</b>"
+    if item["release_date"]:
+        caption += f"\n🗓 মুক্তি: {esc(item['release_date'])}"
+    if item["description"]:
+        caption += f"\n\n{esc(item['description'])}"
+    try:
+        if item["poster_url"]:
+            await bot.send_photo(chat_id, photo=item["poster_url"], caption=caption, parse_mode="HTML")
+        else:
+            await bot.send_message(chat_id, caption, parse_mode="HTML")
+    except Exception:
+        log.exception("Upcoming post failed")
+        return _js_redirect("/upcoming" + _flash(request, "পোস্ট করা যায়নি—poster URL বা chat ID যাচাই করুন।", "err"))
+    await db.log_event("upcoming_post", {"id": upcoming_id, "chat_id": chat_id, "by": request["user_id"]})
+    return _js_redirect("/upcoming" + _flash(request, "✅ Upcoming movie poster সহ পোস্ট হয়েছে।", "ok"))
+
+
 async def miniapp_claim(request: web.Request) -> web.Response:
     user_id = _miniapp_user_id(request)
     if not user_id:
@@ -536,6 +758,37 @@ async def miniapp_claim(request: web.Request) -> web.Response:
         },
         headers={"Cache-Control": "no-store"},
     )
+
+
+async def miniapp_complete_ad(request: web.Request) -> web.Response:
+    """Deliver the file from the ad page itself; deep-links remain only a fallback."""
+    token = (request.match_info.get("token") or "").strip()
+    row = await db.get_ad_token(token)
+    if not row:
+        return web.json_response({"ok": False, "error": "লিংকটি আর কার্যকর নেই।"}, status=404)
+    if row["used"]:
+        return web.json_response({"ok": True, "already_sent": True})
+    if time.time() > row["expires_at"]:
+        return web.json_response({"ok": False, "error": "লিংকের মেয়াদ শেষ হয়ে গেছে।"}, status=410)
+
+    from ..handlers.callbacks import deliver_movie
+
+    class _DirectTarget:
+        def __init__(self, bot: Any, chat_id: int):
+            self.bot = bot
+            self.chat = type("Chat", (), {"id": chat_id})()
+            self.from_user = type("User", (), {"id": chat_id})()
+
+        async def answer(self, text: str, **kwargs: Any):
+            return await self.bot.send_message(self.chat.id, text, **kwargs)
+
+    delivered = await deliver_movie(
+        _DirectTarget(request.app["bot"], row["user_id"]), row["movie_id"]
+    )
+    if not delivered:
+        return web.json_response({"ok": False, "error": "ফাইল পাঠানো যায়নি।"}, status=502)
+    await db.mark_ad_token_used(token)
+    return web.json_response({"ok": True, "sent": True})
 
 
 # ──────────────────────────────────────────────────────────────── #
@@ -1597,7 +1850,8 @@ async def ad_page(request: web.Request) -> web.Response:
             "ad.html", request,
             {"token_valid": False, "used": False, "expired": False,
              "title": "", "bot_username": bot_username,
-             "wait_secs": wait_secs, "circumference": circumference, "tg_link": ""},
+             "wait_secs": wait_secs, "circumference": circumference, "tg_link": "",
+             "complete_url": f"/ad/{token}/complete", "token": token},
         )
 
     import time as _time
@@ -1606,7 +1860,8 @@ async def ad_page(request: web.Request) -> web.Response:
             "ad.html", request,
             {"token_valid": True, "used": True, "expired": False,
              "title": "", "bot_username": bot_username,
-             "wait_secs": wait_secs, "circumference": circumference, "tg_link": ""},
+             "wait_secs": wait_secs, "circumference": circumference, "tg_link": "",
+             "complete_url": f"/ad/{token}/complete", "token": token},
         )
 
     if _time.time() > row["expires_at"]:
@@ -1614,7 +1869,8 @@ async def ad_page(request: web.Request) -> web.Response:
             "ad.html", request,
             {"token_valid": True, "used": False, "expired": True,
              "title": "", "bot_username": bot_username,
-             "wait_secs": wait_secs, "circumference": circumference, "tg_link": ""},
+             "wait_secs": wait_secs, "circumference": circumference, "tg_link": "",
+             "complete_url": f"/ad/{token}/complete", "token": token},
         )
 
     movie = await db.get_movie(row["movie_id"])
@@ -1625,7 +1881,8 @@ async def ad_page(request: web.Request) -> web.Response:
         "ad.html", request,
         {"token_valid": True, "used": False, "expired": False,
          "title": title, "bot_username": bot_username,
-         "wait_secs": wait_secs, "circumference": circumference, "tg_link": tg_link},
+         "wait_secs": wait_secs, "circumference": circumference, "tg_link": tg_link,
+         "complete_url": f"/ad/{token}/complete", "token": token},
     )
 
 
@@ -1686,10 +1943,15 @@ def setup_routes(app: web.Application) -> None:
     app.router.add_get("/miniapp", miniapp_page)
     app.router.add_get("/miniapp/", miniapp_page)
     app.router.add_get("/api/miniapp/movies", miniapp_movies)
+    app.router.add_get("/api/miniapp/posters/{movie_id}", miniapp_poster)
     app.router.add_get("/api/miniapp/movies/{movie_id}", miniapp_movie_detail)
+    app.router.add_get("/api/miniapp/movies/{movie_id}/comments", miniapp_comments)
+    app.router.add_post("/api/miniapp/movies/{movie_id}/comments", miniapp_add_comment)
+    app.router.add_get("/api/miniapp/upcoming", miniapp_upcoming)
     app.router.add_post("/api/miniapp/rating", miniapp_rate_movie)
     app.router.add_post("/api/miniapp/favorite", miniapp_toggle_favorite)
     app.router.add_post("/api/miniapp/claim", miniapp_claim)
+    app.router.add_post("/ad/{token}/complete", miniapp_complete_ad)
     app.router.add_get("/login", login_get)
     app.router.add_post("/login", login_post)
     app.router.add_post("/logout", logout)
@@ -1700,6 +1962,10 @@ def setup_routes(app: web.Application) -> None:
     app.router.add_post("/movies/delete", movie_delete)
     app.router.add_get("/movies/edit", movie_edit_form)
     app.router.add_post("/movies/edit", movie_edit_save)
+    app.router.add_get("/upcoming", upcoming_page)
+    app.router.add_post("/upcoming/add", upcoming_add)
+    app.router.add_post("/upcoming/delete", upcoming_delete)
+    app.router.add_post("/upcoming/post", upcoming_post)
 
     app.router.add_get("/post", post_form)
     app.router.add_post("/post", post_submit)

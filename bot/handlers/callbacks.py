@@ -40,14 +40,14 @@ _SENDERS = {
 }
 
 
-async def deliver_movie(target, movie_id: int) -> None:
+async def deliver_movie(target, movie_id: int) -> bool:
     movie = await db.get_movie(movie_id)
     if not movie:
         if isinstance(target, CallbackQuery):
             await target.answer("⚠️ এই ফাইলটি লাইব্রেরিতে আর নেই।", show_alert=True)
         else:
             await target.answer("⚠️ এই ফাইলটি লাইব্রেরিতে আর নেই।")
-        return
+        return False
 
     bot = target.bot
     chat_id = (
@@ -94,6 +94,7 @@ async def deliver_movie(target, movie_id: int) -> None:
             asyncio.create_task(
                 movie_delete_countdown(bot, chat_id, sent.message_id, MOVIE_TTL)
             )
+        return True
 
     except TelegramBadRequest as exc:
         log.warning("Failed to deliver movie %s: %s", movie_id, exc)
@@ -102,10 +103,17 @@ async def deliver_movie(target, movie_id: int) -> None:
             await target.answer(msg, show_alert=True)
         else:
             await target.answer(msg)
+        return False
     except Exception:
         log.exception("Unexpected delivery failure")
         if isinstance(target, CallbackQuery):
             await target.answer("❌ ফাইল পাঠানো যায়নি।", show_alert=True)
+        else:
+            try:
+                await target.answer("❌ ফাইল পাঠানো যায়নি।")
+            except Exception:
+                pass
+        return False
 
 
 def _countdown_text(title: str, remaining: int, total: int, ad_url: str) -> str:
@@ -219,8 +227,8 @@ async def deliver_movie_by_token(message: Message, token: str) -> None:
     if row["user_id"] != message.from_user.id:
         await message.answer("⛔ এই লিংকটি আপনার জন্য নয়।")
         return
-    await db.mark_ad_token_used(token)
-    await deliver_movie(message, row["movie_id"])
+    if await deliver_movie(message, row["movie_id"]):
+        await db.mark_ad_token_used(token)
 
 
 @router.callback_query(F.data.startswith("m:get:"))

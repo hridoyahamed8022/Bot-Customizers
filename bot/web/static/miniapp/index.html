@@ -5,20 +5,20 @@
     <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
     <meta name="theme-color" content="#0c1728" />
     <link rel="icon" href="data:," />
-    <title>Movies Link BD · Moviex Hub</title>
+    <title>Moviex Hub</title>
     <link rel="stylesheet" href="/miniapp/assets/style.css" />
   </head>
   <body>
     <div class="app-shell">
       <header class="topbar">
         <button id="back-button" class="icon-button hidden" type="button" aria-label="ফিরে যান">‹</button>
-        <div class="topbar-title">Movies Link <b>BD</b></div>
+        <div class="topbar-title">Moviex Hub</div>
         <button class="icon-button" type="button" aria-label="আরও">⋮</button>
       </header>
 
       <main id="home-screen">
         <section class="brand-panel">
-          <h1>Movies Link <b>BD</b></h1>
+          <h1>Moviex Hub</h1>
           <span class="home-pill">⌂ Home Page</span>
         </section>
 
@@ -48,6 +48,16 @@
           <div id="recent-grid" class="movie-grid"></div>
         </section>
 
+        <section id="upcoming-section" class="content-section hidden">
+          <div class="section-title"><h2>▣ Upcoming</h2><span id="upcoming-count" class="count-pill"></span></div>
+          <div id="upcoming-grid" class="movie-grid"></div>
+          <div id="upcoming-empty" class="empty-state hidden">
+            <div class="empty-icon">🗓</div>
+            <h3>Upcoming list এখনও খালি</h3>
+            <p>Admin panel থেকে নতুন movie যোগ করা হলে এখানে দেখা যাবে।</p>
+          </div>
+        </section>
+
         <section id="all-section" class="content-section">
           <div class="section-title"><h2 id="all-heading">সব মুভি</h2><span id="count" class="count-pill">লোড হচ্ছে...</span></div>
           <div id="movie-grid" class="movie-grid"></div>
@@ -74,9 +84,10 @@
           </div>
           <p id="detail-caption" class="detail-caption"></p>
           <section class="rating-panel">
-            <div><strong>Comments (0)</strong><span>Your Rating</span></div>
+            <div><strong id="comments-heading">Comments (0)</strong><span>Your Rating</span></div>
             <div id="rating-stars" class="rating-stars" aria-label="রেটিং"></div>
-            <div class="comment-box"><input placeholder="Add a public comment..." disabled /><button type="button" disabled>➤</button></div>
+            <div id="comments-list" class="comments-list"></div>
+            <div class="comment-box"><input id="comment-input" maxlength="500" placeholder="Add a public comment..." /><button id="comment-button" type="button">➤</button></div>
           </section>
         </div>
       </section>

@@ -1,0 +1,74 @@
+{% extends "base.html" %}
+{% block title %}আপকামিং মুভি{% endblock %}
+{% block content %}
+<div style="display:flex;align-items:center;justify-content:space-between;gap:1rem;flex-wrap:wrap;margin-bottom:1rem">
+  <div>
+    <h1 style="margin-bottom:.25rem">🗓 আপকামিং মুভি</h1>
+    <p class="muted" style="margin:0">Mini App-এর Upcoming tab ও Telegram channel-এর জন্য poster সহ তালিকা তৈরি করুন।</p>
+  </div>
+</div>
+
+{% if flash %}
+<div class="flash flash-{{ flash.kind }}">{{ flash.msg }}</div>
+{% endif %}
+
+<section class="card-block" style="margin-bottom:1.2rem">
+  <h2 style="margin-top:0">➕ নতুন Upcoming movie</h2>
+  <form method="post" action="/upcoming/add" class="form">
+    <label>মুভির নাম <span style="color:#f87171">*</span>
+      <input type="text" name="title" placeholder="যেমন: Avatar 4" required>
+    </label>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:.8rem">
+      <label>ক্যাটাগরি
+        <input type="text" name="category" value="Upcoming" placeholder="Movie / Series">
+      </label>
+      <label>মুক্তির তারিখ
+        <input type="text" name="release_date" placeholder="যেমন: 25 December 2026">
+      </label>
+    </div>
+    <label>Poster / Thumbnail URL
+      <input type="url" name="poster_url" placeholder="https://.../poster.jpg">
+      <small>Public image URL দিন। Telegram channel-এ এই URL থেকেই poster পাঠানো হবে।</small>
+    </label>
+    <label>বিবরণ (ঐচ্ছিক)
+      <textarea name="description" rows="3" placeholder="এক লাইনের description বা ভাষা লিখুন"></textarea>
+    </label>
+    <button class="btn primary" type="submit">💾 Upcoming-এ যোগ করুন</button>
+  </form>
+</section>
+
+<section class="card-block">
+  <h2 style="margin-top:0">তালিকা ({{ upcoming|length }})</h2>
+  {% if upcoming %}
+  <div style="display:grid;gap:.75rem">
+    {% for item in upcoming %}
+    <article style="display:flex;gap:.85rem;align-items:center;padding:.7rem;border:1px solid var(--border);border-radius:10px;background:var(--panel-2)">
+      {% if item.poster_url %}
+      <img src="{{ item.poster_url }}" alt="" style="width:58px;height:78px;object-fit:cover;border-radius:6px;background:#222">
+      {% else %}
+      <div style="width:58px;height:78px;display:grid;place-items:center;border-radius:6px;background:linear-gradient(145deg,#4338ca,#ec4899);font-weight:800;color:white">MB</div>
+      {% endif %}
+      <div style="flex:1;min-width:0">
+        <strong style="display:block">{{ item.title }}</strong>
+        <span class="muted" style="font-size:.8rem">{{ item.category }}{% if item.release_date %} · {{ item.release_date }}{% endif %}</span>
+        {% if item.description %}<p style="margin:.3rem 0 0;font-size:.82rem;color:var(--muted)">{{ item.description }}</p>{% endif %}
+      </div>
+      <div style="display:flex;gap:.35rem;flex-wrap:wrap;justify-content:flex-end">
+        <form method="post" action="/upcoming/post" style="display:flex;gap:.3rem;align-items:center">
+          <input type="hidden" name="id" value="{{ item.id }}">
+          <input type="text" name="chat_id" value="{{ request_group_id or '' }}" placeholder="Chat ID" style="width:125px">
+          <button class="btn primary" type="submit" style="padding:.35rem .55rem;font-size:.8rem">📤 পোস্ট</button>
+        </form>
+        <form method="post" action="/upcoming/delete" onsubmit="return confirm('এই upcoming movie মুছবেন?')">
+          <input type="hidden" name="id" value="{{ item.id }}">
+          <button class="btn danger" type="submit" style="padding:.35rem .55rem;font-size:.8rem">✕</button>
+        </form>
+      </div>
+    </article>
+    {% endfor %}
+  </div>
+  {% else %}
+  <p class="muted">এখনও কোনো Upcoming movie যোগ করা হয়নি।</p>
+  {% endif %}
+</section>
+{% endblock %}

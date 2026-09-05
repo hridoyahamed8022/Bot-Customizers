@@ -180,9 +180,9 @@ body{
     <div class="pbar" id="pbar" style="width:100%"></div>
   </div>
 
-  <div class="info-box">
-    ⏳ সময় শেষ হলে <strong>মুভি পান</strong> বাটন চালু হবে।<br>
-    পেজ থেকে বের হলে মুভি পাবেন না।
+   <div class="info-box" id="delivery-info">
+     ⏳ সময় শেষ হলে <strong>মুভি সরাসরি আপনার bot inbox-এ যাবে</strong>।<br>
+     পেজটি খোলা রাখুন।
   </div>
 
   <a id="btn-get" class="btn btn-disabled" href="#">
@@ -204,21 +204,42 @@ body{
   var pbar = document.getElementById('pbar');
   var btn = document.getElementById('btn-get');
   var tgLink = {{ tg_link | tojson }};
+  var completeUrl = {{ complete_url | tojson }};
+  var delivered = false;
+
+  function completeDelivery(){
+    if(delivered) return;
+    delivered = true;
+    btn.className = 'btn btn-primary';
+    btn.removeAttribute('href');
+    btn.textContent = '📬 বটে ফাইল পাঠানো হচ্ছে...';
+    fetch(completeUrl, {method:'POST', headers:{'Content-Type':'application/json'}})
+      .then(function(response){ return response.json(); })
+      .then(function(data){
+        if(data.ok){
+          btn.textContent = '✅ মুভি বটের inbox-এ পাঠানো হয়েছে';
+          var info = document.getElementById('delivery-info');
+          if(info) info.innerHTML = '🎬 <strong>{{ title }}</strong><br>Telegram bot খুলে আপনার ফাইলটি দেখুন।';
+        } else {
+          delivered = false;
+          btn.href = tgLink;
+          btn.textContent = '🎬 মুভি পান → Telegram খুলুন';
+        }
+      })
+      .catch(function(){
+        delivered = false;
+        btn.href = tgLink;
+        btn.textContent = '🎬 মুভি পান → Telegram খুলুন';
+      });
+  }
 
   function tick(){
     if(remaining <= 0){
       secsEl.textContent = '0';
       ring.style.strokeDashoffset = circum;
       pbar.style.width = '0%';
-      btn.href = tgLink;
       btn.className = 'btn btn-primary';
-      btn.textContent = '🎬 মুভি পান → Telegram খুলুন';
-      // Mini App flow: return to the bot automatically after the wait.
-      // Keep the visible button as a fallback for browsers that block
-      // script-driven Telegram deep-link navigation.
-      setTimeout(function(){
-        try { window.location.href = tgLink; } catch(e) {}
-      }, 350);
+      completeDelivery();
       return;
     }
     remaining--;

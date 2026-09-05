@@ -40,25 +40,31 @@ async def _get_bot_link(bot) -> str:
 def _extract_media(message: Message):
     if message.video:
         v = message.video
-        return ("video", v.file_id, v.file_unique_id, v.file_name, v.mime_type, v.file_size or 0, v.duration or 0)
+        return ("video", v.file_id, v.file_unique_id, v.file_name, v.mime_type, v.file_size or 0, v.duration or 0,
+                getattr(getattr(v, "thumbnail", None), "file_id", None))
     if message.document:
         d = message.document
-        return ("document", d.file_id, d.file_unique_id, d.file_name, d.mime_type, d.file_size or 0, 0)
+        return ("document", d.file_id, d.file_unique_id, d.file_name, d.mime_type, d.file_size or 0, 0,
+                getattr(getattr(d, "thumbnail", None), "file_id", None))
     if message.audio:
         a = message.audio
-        return ("audio", a.file_id, a.file_unique_id, a.file_name or a.title, a.mime_type, a.file_size or 0, a.duration or 0)
+        return ("audio", a.file_id, a.file_unique_id, a.file_name or a.title, a.mime_type, a.file_size or 0, a.duration or 0,
+                getattr(getattr(a, "thumbnail", None), "file_id", None))
     if message.animation:
         an = message.animation
-        return ("animation", an.file_id, an.file_unique_id, an.file_name, an.mime_type, an.file_size or 0, an.duration or 0)
+        return ("animation", an.file_id, an.file_unique_id, an.file_name, an.mime_type, an.file_size or 0, an.duration or 0,
+                getattr(getattr(an, "thumbnail", None), "file_id", None))
     if message.voice:
         vo = message.voice
-        return ("voice", vo.file_id, vo.file_unique_id, None, vo.mime_type, vo.file_size or 0, vo.duration or 0)
+        return ("voice", vo.file_id, vo.file_unique_id, None, vo.mime_type, vo.file_size or 0, vo.duration or 0, None)
     if message.video_note:
         vn = message.video_note
-        return ("video_note", vn.file_id, vn.file_unique_id, None, None, vn.file_size or 0, vn.duration or 0)
+        return ("video_note", vn.file_id, vn.file_unique_id, None, None, vn.file_size or 0, vn.duration or 0,
+                getattr(getattr(vn, "thumbnail", None), "file_id", None))
     if message.photo:
         p = message.photo[-1]
         return ("photo", p.file_id, p.file_unique_id, None, "image/jpeg", p.file_size or 0, 0)
+        return ("photo", p.file_id, p.file_unique_id, None, "image/jpeg", p.file_size or 0, 0, p.file_id)
     return None
 
 
@@ -159,7 +165,7 @@ async def _index(message: Message) -> None:
     media = _extract_media(message)
     if not media:
         return
-    file_type, file_id, file_unique_id, file_name, mime, size, duration = media
+    file_type, file_id, file_unique_id, file_name, mime, size, duration, poster_file_id = media
     caption = message.caption or message.text or ""
     title = derive_title(caption, file_name)
 
@@ -173,6 +179,7 @@ async def _index(message: Message) -> None:
         "duration":         duration,
         "title":            title,
         "caption":          caption,
+        "poster_file_id":   poster_file_id,
         "source_chat_id":   message.chat.id,
         "source_message_id": message.message_id,
     })
