@@ -130,14 +130,11 @@ async def _notify_backup(bot, title: str, file_type: str, movie_id: int = 0) -> 
         count_line = ""
 
     text = (
-        f"{emoji} <b>নতুন কন্টেন্ট যোগ হয়েছে!</b>\n"
-        f"━━━━━━━━━━━━━━━━━━━━\n\n"
-        f"🎯 <b>{title}</b>\n"
-        f"📂 <i>{label}</i>\n"
+        f"{emoji} <b>নতুন মুভি যোগ হয়েছে!</b>\n"
+        f"🎯 <b>{title}</b> · {label}\n"
         + (f"\n{count_line}" if count_line else "")
-        + f"\n{search_line}\n\n"
-        f"━━━━━━━━━━━━━━━━━━━━\n"
-        f"🔍 নামটি বটে লিখলেই ফাইল পাবেন"
+        + f"\n{search_line}\n"
+        f"🔍 বটে নাম লিখে সার্চ করুন"
         + (f"\n👉 {bot_link}" if bot_link else "")
     )
 

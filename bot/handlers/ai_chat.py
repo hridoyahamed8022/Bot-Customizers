@@ -90,7 +90,7 @@ async def _exec_search(query: str, rows_collector: List[Any]) -> str:
         for r in rows[:8]:
             if not any(x["id"] == r["id"] for x in rows_collector):
                 rows_collector.append(dict(r))
-        lines = [f"✅ '{q}' — {total}টি ফাইল পাওয়া গেছে। নিচের বাটনে ক্লিক করো:"]
+        lines = [f"✅ '{q}' — {total}টি ফাইল। নিচে বাছুন:"]
         if total > 8:
             lines.append(f"(আরো {total - 8}টি সরাসরি সার্চ করলে দেখা যাবে)")
         return "\n".join(lines)
@@ -246,9 +246,8 @@ def _chat_kb() -> InlineKeyboardMarkup:
 
 _WELCOME_MSG = (
     "🎬 <b>সিনে-বাবু এখানে!</b>\n\n"
-    "মুভির নাম বলো — বটে আছে কিনা খুঁজে বাটন দেব। "
-    "মুভির তথ্য, রিলিজ ডেট, গল্প — সব বলতে পারব।\n\n"
-    "💬 বাংলায় বা ইংরেজিতে লেখো:"
+    "মুভির নাম বা প্রশ্ন লিখুন।\n"
+    "বাংলা/ইংরেজি দুটোই চলবে।"
 )
 
 

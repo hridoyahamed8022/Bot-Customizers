@@ -35,10 +35,8 @@ async def movie_delete_countdown(bot, chat_id: int, movie_message_id: int, secon
         try:
             warn = await bot.send_message(
                 chat_id,
-                f"{emoji} <b>সতর্কতা {i + 1}/{_WARN_COUNT}!</b>\n\n"
-                f"⏳ মুভিটি আর <b>{remaining_secs} সেকেন্ড</b> পর মুছে যাবে!\n\n"
-                f"📤 <b>এখনই ফরওয়ার্ড করুন</b> — বন্ধু, আত্মীয় বা নিজের Saved Messages-এ রাখুন,\n"
-                f"নয়তো মুভিটি চিরতরে চলে যাবে! 🙏",
+                f"{emoji} <b>{remaining_secs} সেকেন্ড পর মুছে যাবে</b>\n"
+                "📤 এখনই ফরওয়ার্ড করুন।",
                 parse_mode="HTML",
             )
             asyncio.create_task(schedule_delete(bot, chat_id, warn.message_id, MSG_TTL))

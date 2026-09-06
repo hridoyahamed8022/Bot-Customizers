@@ -24,9 +24,8 @@ async def cmd_panel(message: Message) -> None:
         return
     url = settings.public_url or "http://localhost:5000"
     await message.answer(
-        "🛠 <b>অ্যাডমিন প্যানেল</b>\n\n"
-        f"নিচের লিংকে গিয়ে ইউজারনেম + পাসওয়ার্ড দিয়ে লগইন করুন — "
-        f"একবার লগইন করলে ৭ দিন লগইন থাকবে:\n\n"
+        "🛠 <b>অ্যাডমিন প্যানেল</b>\n"
+        "নিচের লিংকে লগইন করুন:\n\n"
         f"<a href='{url}/login'>{url}/login</a>"
     )
 
@@ -38,8 +37,7 @@ async def cmd_login(message: Message) -> None:
         return
     url = settings.public_url or "http://localhost:5000"
     await message.answer(
-        "🔑 <b>লগইন এখন স্থায়ী</b>\n\n"
-        "এক-বারের লিংকের আর প্রয়োজন নেই। সরাসরি ওয়েব প্যানেলে গিয়ে "
-        "ইউজারনেম + পাসওয়ার্ড দিয়ে লগইন করুন:\n\n"
+        "🔑 <b>অ্যাডমিন লগইন</b>\n"
+        "নিচের লিংকে ইউজারনেম-পাসওয়ার্ড দিন:\n\n"
         f"<a href='{url}/login'>{url}/login</a>"
     )

@@ -69,13 +69,13 @@ class BanMiddleware(BaseMiddleware):
             rem = _remaining_text(expires_at)
             if expires_at:
                 msg = (
-                    f"⛔ <b>আপনাকে সাময়িকভাবে বট ব্যবহার থেকে বিরত রাখা হয়েছে।</b>{rem}\n\n"
-                    f"ব্যান তুলতে আমাদের গ্রুপে যোগাযোগ করুন।"
+                    f"⛔ <b>সাময়িক ব্যান।</b>{rem}\n"
+                    f"গ্রুপে যোগাযোগ করুন।"
                 )
             else:
                 msg = (
-                    "⛔ <b>আপনাকে এই বট থেকে ব্যান করা হয়েছে।</b>\n\n"
-                    "ব্যান তুলতে আমাদের গ্রুপে যোগাযোগ করুন।"
+                    "⛔ <b>আপনি ব্যান।</b>\n"
+                    "গ্রুপে যোগাযোগ করুন।"
                 )
             kb = await _group_kb()
             try:
@@ -105,10 +105,8 @@ class BanMiddleware(BaseMiddleware):
                         InlineKeyboardButton(text="📢 গ্রুপে যোগাযোগ করুন", url=disc_url)
                     ]])
                 notice = (
-                    "⚠️ <b>আপনি আগে এই বটকে ব্লক করে রেখেছিলেন।</b>\n\n"
-                    "তাই কিছু নোটিফিকেশন মিস হয়ে থাকতে পারে।\n"
-                    "এখন বট স্বাভাবিকভাবে ব্যবহার করতে পারবেন। 🎬\n\n"
-                    "যেকোনো সমস্যায় গ্রুপে যোগাযোগ করুন।"
+                    "⚠️ আপনি আগে বট ব্লক করেছিলেন।\n"
+                    "এখন আবার ব্যবহার করতে পারবেন। 🎬"
                 )
                 if isinstance(event, Message):
                     from aiogram.enums import ParseMode

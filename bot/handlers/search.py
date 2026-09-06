@@ -64,10 +64,8 @@ def verify_kb(channels) -> InlineKeyboardMarkup:
 
 VERIFY_TEXT = (
     "🔐 <b>ভেরিফিকেশন প্রয়োজন</b>\n"
-    "━━━━━━━━━━━━━━━━━━━━\n\n"
-    "বট ব্যবহারের আগে আমাদের <b>২টি চ্যানেলে</b> জয়েন করুন।\n\n"
-    "👇 নিচের বাটনে জয়েন করুন, তারপর <b>ভেরিফাই</b> করুন।\n"
-    "<i>এটি একবারই করতে হবে।</i>"
+    "চ্যানেলে জয়েন করে <b>✅ ভেরিফাই</b> চাপুন।\n"
+    "শুধু একবার করতে হবে।"
 )
 
 
@@ -250,25 +248,19 @@ async def _do_search(message_or_cb, query: str, page: int = 0) -> None:
         else:
             text = (
                 f"😕 <b>'{esc(query)}'</b> — পাওয়া যায়নি\n"
-                f"━━━━━━━━━━━━━━━━━━━━\n\n"
-                f"<b>সম্ভাব্য কারণ:</b>\n"
-                f"• বানান ভুল — সঠিক ইংরেজিতে আবার চেষ্টা করুন\n"
-                f"• মুভিটি এখনো লাইব্রেরিতে নেই"
+                f"বানান দেখুন বা রিকোয়েস্ট করুন।"
             )
 
         if suggestions:
             text += (
-                f"\n\n💡 <b>এগুলো খুঁজছিলেন?</b>\n"
+                f"\n\n💡 <b>এগুলো কি?</b>\n"
                 + "\n".join(f"• <i>{esc(r['title'])}</i>" for r in suggestions)
             )
         else:
-            text += f"\n\n✅ <i>না পেলে নিচে রিকোয়েস্ট করুন।</i>"
+            text += f"\n\n📝 নিচে রিকোয়েস্ট করুন।"
 
         if channel_btns:
-            text += (
-                "\n\n━━━━━━━━━━━━━━━━━━━━\n"
-                "📢 <b>আমাদের চ্যানেল</b> — নতুন মুভি সবার আগে পান।"
-            )
+            text += "\n\n📢 আমাদের চ্যানেল"
 
         kb = _no_results_kb(suggestions, query, channel_btns)
         if isinstance(message_or_cb, CallbackQuery):
@@ -287,13 +279,10 @@ async def _do_search(message_or_cb, query: str, page: int = 0) -> None:
     pages = max(1, (total + PAGE - 1) // PAGE)
     text = (
         f"🔍 <b>{total}টি ফলাফল</b> — <code>{esc(query)}</code>\n"
-        f"<i>পৃষ্ঠা {page + 1}/{pages} · বাটনে ক্লিক করলেই ফাইল আসবে</i>"
+        f"পৃষ্ঠা {page + 1}/{pages} · মুভি বাছুন"
     )
     if channel_btns:
-        text += (
-            "\n\n━━━━━━━━━━━━━━━━━━━━\n"
-            "📢 <b>আমাদের চ্যানেল</b> — নতুন মুভি সবার আগে পান।"
-        )
+        text += "\n\n📢 আমাদের চ্যানেল"
 
     kb = _results_kb(rows, page, total, channel_btns)
     if isinstance(message_or_cb, CallbackQuery):
@@ -316,8 +305,7 @@ async def _gate_search(message_or_cb, query: str, page: int = 0) -> None:
     if not is_english_query(query):
         text = (
             "⚠️ <b>ইংরেজিতে সার্চ করুন</b>\n\n"
-            "✅ সঠিক: <code>3 idiots</code>\n"
-            "❌ ভুল: <code>৩ ইডিয়টস</code>"
+            "উদাহরণ: <code>3 idiots</code>"
         )
         kb = InlineKeyboardBuilder()
         kb.button(text="ℹ️ কীভাবে সার্চ করব?", callback_data="ai:topic:howto")
@@ -357,8 +345,7 @@ async def cmd_search(message: Message, command: CommandObject) -> None:
     q = (command.args or "").strip()
     if not q:
         sent = await message.answer(
-            "নিয়ম: <code>/search avengers</code>\n"
-            "<i>নাম ইংরেজিতে দিন</i>"
+            "ব্যবহার: <code>/search avengers</code>"
         )
         asyncio.create_task(
             schedule_delete(message.bot, message.from_user.id, sent.message_id, MSG_TTL)
@@ -388,10 +375,8 @@ async def on_private_text(message: Message) -> None:
 async def cb_search_start(callback: CallbackQuery) -> None:
     text = (
         "🔍 <b>মুভি সার্চ করুন</b>\n"
-        "━━━━━━━━━━━━━━━━━━━━\n\n"
-        "মুভির নাম <b>ইংরেজিতে</b> লিখে পাঠান।\n\n"
-        "✅ <code>3 idiots</code> · <code>kgf</code>\n"
-        "❌ <code>৩ ইডিয়টস</code> — কাজ হবে না।"
+        "নাম ইংরেজিতে লিখুন।\n"
+        "উদাহরণ: <code>3 idiots</code> · <code>kgf</code>"
     )
     kb = InlineKeyboardBuilder()
     kb.button(text="📝 রিকোয়েস্ট করুন", callback_data="req:start")

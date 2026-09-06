@@ -50,16 +50,12 @@ async def _show_stats(target, user_id: int) -> None:
     sub_text = "✅ সক্রিয়" if stats["subscribed"] else "❌ বন্ধ"
 
     text = (
-        f"📊 <b>আপনার পরিসংখ্যান</b>\n"
-        f"━━━━━━━━━━━━━━━━━━━━\n\n"
-        f"👤 <b>নাম:</b> {esc(user['first_name'] or 'অজানা')}\n"
-        f"🆔 <b>আইডি:</b> <code>{user_id}</code>\n"
-        f"📅 <b>যোগ দিয়েছেন:</b> {joined}\n\n"
-        f"🎬 <b>মুভি নিয়েছেন:</b> {stats['downloads']}বার\n"
-        f"📝 <b>রিকোয়েস্ট:</b> {stats['requests']}টি\n"
-        f"❤️ <b>ফেভারিট:</b> {stats['favorites']}টি\n"
-        f"⚠️ <b>সতর্কতা:</b> {stats['warnings']}টি\n"
-        f"🔔 <b>নতুন মুভি নোটিফিকেশন:</b> {sub_text}"
+        f"📊 <b>প্রোফাইল</b>\n"
+        f"👤 {esc(user['first_name'] or 'অজানা')} · <code>{user_id}</code>\n"
+        f"📅 যোগ: {joined}\n"
+        f"🎬 মুভি: {stats['downloads']} · 📝 রিকোয়েস্ট: {stats['requests']}\n"
+        f"❤️ ফেভারিট: {stats['favorites']} · ⚠️ সতর্কতা: {stats['warnings']}\n"
+        f"🔔 নোটিফিকেশন: {sub_text}"
     )
 
     kb = InlineKeyboardBuilder()
@@ -108,11 +104,10 @@ async def _show_requests(target, user_id: int) -> None:
     if not rows:
         text = (
             "📋 <b>আমার রিকোয়েস্ট</b>\n"
-            "━━━━━━━━━━━━━━━━━━━━\n\n"
-            "<i>আপনি এখনো কোনো মুভি রিকোয়েস্ট করেননি।</i>"
+            "এখনো কোনো রিকোয়েস্ট নেই।"
         )
     else:
-        lines = ["📋 <b>আমার রিকোয়েস্ট</b>\n━━━━━━━━━━━━━━━━━━━━\n"]
+        lines = ["📋 <b>আমার রিকোয়েস্ট</b>"]
         for r in rows:
             emoji = _STATUS_EMOJI.get(r["status"], "❓")
             date_str = time.strftime("%d/%m", time.localtime(r["created_at"]))
@@ -166,11 +161,10 @@ async def _show_history(target, user_id: int) -> None:
     if not rows:
         text = (
             "📥 <b>ডাউনলোড ইতিহাস</b>\n"
-            "━━━━━━━━━━━━━━━━━━━━\n\n"
-            "<i>এখনো কোনো মুভি ডাউনলোড করেননি।</i>"
+            "এখনো কোনো ডাউনলোড নেই।"
         )
     else:
-        lines = ["📥 <b>ডাউনলোড ইতিহাস</b>\n━━━━━━━━━━━━━━━━━━━━"]
+        lines = ["📥 <b>ডাউনলোড ইতিহাস</b>"]
         for r in rows:
             date_str = time.strftime("%d/%m %H:%M", time.localtime(r["created_at"]))
             title = esc(r["title"] or "অজানা")
@@ -214,7 +208,7 @@ async def cmd_subscribe(message: Message) -> None:
     is_sub = await db.is_subscribed(user_id)
     await db.set_subscription(user_id, not is_sub)
     if not is_sub:
-        text = "🔔 <b>নোটিফিকেশন চালু হয়েছে!</b>\n\nনতুন মুভি যোগ হলে আপনাকে জানানো হবে। 🎬"
+        text = "🔔 নোটিফিকেশন চালু হয়েছে!"
     else:
         text = "🔕 <b>নোটিফিকেশন বন্ধ করা হয়েছে।</b>"
     sent = await message.answer(text)

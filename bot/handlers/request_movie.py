@@ -39,9 +39,8 @@ async def cb_req_start(callback: CallbackQuery, state: FSMContext) -> None:
     await state.set_state(RequestState.waiting_title)
     text = (
         "📝 <b>মুভি রিকোয়েস্ট</b>\n"
-        "━━━━━━━━━━━━━━━━━━━━\n\n"
-        "মুভির নাম <b>ইংরেজিতে</b> লিখে পাঠান:\n\n"
-        "<i>উদাহরণ: </i><code>3 idiots</code>\n"
+        "নাম ইংরেজিতে লিখুন:\n"
+        "<code>3 idiots</code> বা "
         "<code>money heist season 5</code>"
     )
     try:
@@ -82,10 +81,9 @@ async def cb_req_from_search(callback: CallbackQuery, state: FSMContext) -> None
     kb.adjust(1)
 
     text = (
-        f"📝 <b>মুভি রিকোয়েস্ট — নিশ্চিত করুন</b>\n"
-        f"━━━━━━━━━━━━━━━━━━━━\n\n"
-        f"🎬 <b>মুভির নাম:</b> <code>{esc(title)}</code>\n\n"
-        f"<i>এটাই রিকোয়েস্ট করবেন? নাকি নাম বদলাবেন?</i>"
+        f"📝 <b>নিশ্চিত করুন</b>\n"
+        f"🎬 <code>{esc(title)}</code>\n"
+        f"এটাই রিকোয়েস্ট করবেন?"
     )
     try:
         await callback.message.edit_text(text, reply_markup=kb.as_markup())
@@ -161,8 +159,8 @@ async def req_title_received(message: Message, state: FSMContext) -> None:
     kb.button(text="❌ বাতিল", callback_data="req:cancel")
     kb.adjust(2)
     sent = await message.answer(
-        f"✅ <b>নাম পেয়েছি:</b> <code>{esc(title)}</code>\n\n"
-        "<i>চাইলে বিস্তারিত লিখুন (সিজন/ভাষা/বছর) — অথবা স্কিপ করুন।</i>",
+        f"✅ <code>{esc(title)}</code>\n"
+        "সিজন/ভাষা/বছর দিতে পারেন, না হলে স্কিপ করুন।",
         reply_markup=kb.as_markup(),
     )
     asyncio.create_task(
@@ -229,12 +227,9 @@ async def _save_request(target, state: FSMContext, title: str, note=None) -> Non
         kb.button(text="🏠 হোম", callback_data="home")
         kb.adjust(1)
         text = (
-            f"⚠️ <b>আপনি এই মুভিটি আগেই রিকোয়েস্ট করেছেন!</b>\n"
-            f"━━━━━━━━━━━━━━━━━━━━\n\n"
-            f"🎬 <b>মুভি:</b> <code>{esc(title)}</code>\n"
-            f"🔢 <b>রিকোয়েস্ট #</b>{existing['id']} (এখনও pending){others_line}\n\n"
-            f"একই মুভি বারবার রিকোয়েস্ট করলে সেটা আগে আসে না — "
-            f"রিকোয়েস্ট লিস্টে আছে, আপলোড হলেই সার্চ করলে পাবেন। 🙏"
+            f"⚠️ মুভিটি আগেই রিকোয়েস্ট করা হয়েছে।\n"
+            f"🎬 <code>{esc(title)}</code>\n"
+            f"🔢 রিকোয়েস্ট #{existing['id']} · pending{others_line}"
         )
         sent = await _reply(target, text, kb.as_markup())
         asyncio.create_task(schedule_delete(bot, chat_id, sent.message_id, MSG_TTL))
@@ -248,11 +243,9 @@ async def _save_request(target, state: FSMContext, title: str, note=None) -> Non
         kb.button(text="🏠 হোম", callback_data="home")
         kb.adjust(1)
         text = (
-            f"🚫 <b>আজকের রিকোয়েস্ট সীমা পূর্ণ হয়েছে!</b>\n"
-            f"━━━━━━━━━━━━━━━━━━━━\n\n"
-            f"আজকে আপনি ইতিমধ্যে <b>{daily_count}টি</b> রিকোয়েস্ট করেছেন।\n"
-            f"প্রতিদিন সর্বোচ্চ <b>{_DAILY_LIMIT}টি</b> রিকোয়েস্ট করা যায়।\n\n"
-            f"<i>💡 আগামীকাল আবার রিকোয়েস্ট করুন অথবা সার্চ করে দেখুন।</i>"
+            f"🚫 আজকের সীমা শেষ।\n"
+            f"আজ {daily_count}/{_DAILY_LIMIT}টি রিকোয়েস্ট হয়েছে।\n"
+            f"আগামীকাল আবার চেষ্টা করুন।"
         )
         sent = await _reply(target, text, kb.as_markup())
         asyncio.create_task(schedule_delete(bot, chat_id, sent.message_id, MSG_TTL))
@@ -278,12 +271,10 @@ async def _save_request(target, state: FSMContext, title: str, note=None) -> Non
     note_line = f"\n📋 <i>{esc(note)}</i>" if note else ""
 
     text = (
-        f"✅ <b>রিকোয়েস্ট পাঠানো হয়েছে!</b>\n"
-        f"━━━━━━━━━━━━━━━━━━━━\n\n"
-        f"🎬 <b>মুভি:</b> <code>{esc(title)}</code>{note_line}\n"
-        f"🔢 <b>রিকোয়েস্ট #</b>{req_id}{others_line}\n\n"
-        f"<i>যত দ্রুত সম্ভব আপলোড করব। আপলোড হলে সার্চ করলেই পাবেন।</i> 🍿\n\n"
-        f"📊 আজকে আরও <b>{remaining}টি</b> রিকোয়েস্ট করতে পারবেন।"
+        f"✅ <b>রিকোয়েস্ট পাঠানো হয়েছে</b>\n"
+        f"🎬 <code>{esc(title)}</code>{note_line}\n"
+        f"🔢 #{req_id}{others_line}\n"
+        f"আজ আরও {remaining}টি করা যাবে।"
     )
     kb = InlineKeyboardBuilder()
     kb.button(text="🔍 এখনই সার্চ করুন", callback_data="search:start")

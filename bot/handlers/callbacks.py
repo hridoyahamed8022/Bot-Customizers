@@ -57,16 +57,14 @@ async def deliver_movie(target, movie_id: int) -> bool:
     method = getattr(bot, method_name)
 
     caption = (
-        f"🎬 <b>{esc(movie['title'])}</b>\n\n"
-        f"⏳ <i>এই ফাইলটি <b>{MOVIE_TTL} সেকেন্ড</b> পর মুছে যাবে।\n"
-        f"💡 এখনই কোনো বন্ধুকে ফরওয়ার্ড করে রাখুন!\n"
-        f"আবার পেতে বটে নাম লিখে সার্চ করুন।</i>"
+        f"🎬 <b>{esc(movie['title'])}</b>\n"
+        f"⏳ {MOVIE_TTL} সেকেন্ড পর মুছে যাবে।"
     )
     if movie["caption"]:
         caption = (
-            f"🎬 <b>{esc(movie['title'])}</b>\n\n"
+            f"🎬 <b>{esc(movie['title'])}</b>\n"
             f"{esc(movie['caption'])}\n\n"
-            f"⏳ <i>ফাইলটি <b>{MOVIE_TTL} সেকেন্ড</b> পর মুছে যাবে — বন্ধুকে ফরওয়ার্ড করুন!</i>"
+            f"⏳ {MOVIE_TTL} সেকেন্ড পর মুছে যাবে।"
         )
     if len(caption) > 1024:
         caption = caption[:1020] + "…"
@@ -120,11 +118,10 @@ def _countdown_text(title: str, remaining: int, total: int, ad_url: str) -> str:
     bar_filled = round((total - remaining) / total * 10)
     bar = "🟣" * bar_filled + "⚫" * (10 - bar_filled)
     return (
-        f"🎬 <b>{esc(title)}</b>\n\n"
-        f"📺 বিজ্ঞাপন লিংক খুলুন, তারপর এখানেই মুভি আসবে!\n\n"
+        f"🎬 <b>{esc(title)}</b>\n"
+        f"📺 বিজ্ঞাপন খুলুন।\n"
         f"{bar}\n"
-        f"⏳ <b>{remaining}</b> সেকেন্ড বাকি...\n\n"
-        f"<i>💡 বাটনে ক্লিক করে বিজ্ঞাপনটি দেখুন — {remaining} সেকেন্ড পর মুভি এখানে অটো আসবে।</i>"
+        f"⏳ <b>{remaining}</b> সেকেন্ড বাকি"
     )
 
 
@@ -227,22 +224,22 @@ async def deliver_movie_by_token(message: Message, token: str) -> None:
     """Ad countdown শেষে /start get_{token} থেকে movie পাঠায়।"""
     row = await db.get_ad_token(token)
     if not row:
-        await message.answer("❌ লিংকটি আর কার্যকর নেই। আবার সার্চ করুন।")
+        await message.answer("❌ লিংকটি শেষ। আবার সার্চ করুন।")
         return
     if row["used"] == 1:
-        await message.answer("⚠️ এই লিংকটি আগেই ব্যবহার হয়েছে। আবার সার্চ করুন।")
+        await message.answer("⚠️ লিংকটি ব্যবহার হয়েছে।")
         return
     if row["used"] == -1:
-        await message.answer("⏳ ফাইল পাঠানো হচ্ছে—একটু পরে আপনার inbox দেখুন।")
+        await message.answer("⏳ ফাইল পাঠানো হচ্ছে।")
         return
     if time.time() > row["expires_at"]:
-        await message.answer("⏰ লিংকের মেয়াদ শেষ হয়ে গেছে (২ ঘণ্টা)। আবার সার্চ করুন।")
+        await message.answer("⏰ লিংকের মেয়াদ শেষ।")
         return
     if row["user_id"] != message.from_user.id:
         await message.answer("⛔ এই লিংকটি আপনার জন্য নয়।")
         return
     if not await db.claim_ad_token(token):
-        await message.answer("⏳ এই ফাইলটি ইতিমধ্যে পাঠানো হচ্ছে বা পাঠানো হয়েছে।")
+        await message.answer("⏳ ফাইলটি পাঠানো হচ্ছে বা পাঠানো হয়েছে।")
         return
     if await deliver_movie(message, row["movie_id"]):
         await db.mark_ad_token_used(token)

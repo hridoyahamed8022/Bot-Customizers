@@ -109,10 +109,8 @@ async def _startup_broadcast(bot) -> None:
         from bot.utils import schedule_delete, MSG_TTL
         user_ids = await db.all_user_ids()
         text = (
-            "✅  <b>বট আবার চালু হয়েছে!</b>\n"
-            "┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄\n\n"
-            "🎬  বট এখন সম্পূর্ণ সচল আছে।\n"
-            "🔍  মুভি/ড্রামার নাম ইংরেজিতে লিখে সার্চ করুন — সাথে সাথে ফাইল পেয়ে যাবেন!"
+            "✅ <b>বট চালু হয়েছে!</b>\n"
+            "ইংরেজিতে মুভির নাম লিখে সার্চ করুন।"
         )
         sent = 0
         for uid in user_ids:
@@ -145,15 +143,12 @@ async def _movie_notification_loop(bot) -> None:
                 max_s = notif["max_sends"]
                 remaining = max_s - count
                 if remaining > 0:
-                    reminder_txt = f"\n\n⏳ আর <b>{remaining}</b> বার মনে করিয়ে দেওয়া হবে।"
+                    reminder_txt = f"\n⏳ আরও {remaining} বার মনে করানো হবে।"
                 else:
-                    reminder_txt = "\n\n✅ এটি শেষ রিমাইন্ডার।"
+                    reminder_txt = "\n✅ শেষ রিমাইন্ডার।"
                 text = (
-                    f"🎬 <b>আপনার রিকোয়েস্ট করা মুভি আপলোড হয়েছে!</b>\n"
-                    f"━━━━━━━━━━━━━━━━━━\n\n"
-                    f"📽️ <b>{title}</b>\n\n"
-                    f"✅ অ্যাডমিন টিম এই মুভিটি বটে যোগ করেছে।\n"
-                    f"এখনই বটে গিয়ে নামটি লিখে সার্চ করুন এবং মুভিটি উপভোগ করুন! 🍿"
+                    f"🎬 <b>{title}</b> আপলোড হয়েছে!\n"
+                    f"বটে নামটি লিখে সার্চ করুন। 🍿"
                     f"{reminder_txt}"
                 )
                 kb = InlineKeyboardMarkup(inline_keyboard=[[
@@ -193,11 +188,8 @@ async def _maintenance_end_notifier(bot) -> None:
 
                     disc_url = await db.get_discussion_url()
                     text = (
-                        "✅  <b>বট আবার চালু হয়েছে!</b>\n"
-                        "┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄\n\n"
-                        "🎬  রক্ষণাবেক্ষণ সফলভাবে সম্পন্ন হয়েছে।\n"
-                        "এখন আবার মুভি সার্চ করতে পারবেন! 😊\n\n"
-                        "🔍  নামটি ইংরেজিতে লিখুন — ফাইল পেয়ে যাবেন।"
+                        "✅ <b>বট আবার চালু হয়েছে!</b>\n"
+                        "ইংরেজিতে নাম লিখে সার্চ করুন।"
                     )
                     kb = None
                     if disc_url:
