@@ -1179,7 +1179,7 @@ class Database:
     # Ad Token system
     # ------------------------------------------------------------------ #
     async def create_ad_token(
-        self, movie_id: int, user_id: int, wait_seconds: int = 30
+        self, movie_id: int, user_id: int, wait_seconds: int = 10
     ) -> str:
         import secrets as _sec
         token = _sec.token_urlsafe(24)

@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>মুভি পান — Moviex Hub</title>
+<title>মুভি পান — Moviex Hub Team</title>
 <style>
 *{box-sizing:border-box;margin:0;padding:0}
 body{
@@ -13,6 +13,21 @@ body{
   font-family:'Segoe UI',system-ui,-apple-system,sans-serif;
   display:flex;align-items:center;justify-content:center;
   padding:1rem;
+  overflow-x:hidden;
+}
+body::before,body::after{
+  content:"";position:fixed;border-radius:50%;pointer-events:none;filter:blur(4px);
+  opacity:.32;z-index:0;
+}
+body::before{
+  width:260px;height:260px;top:-80px;left:-70px;
+  background:radial-gradient(circle,#a855f7 0%,transparent 68%);
+  animation:orbDrift 8s ease-in-out infinite alternate;
+}
+body::after{
+  width:300px;height:300px;right:-100px;bottom:-100px;
+  background:radial-gradient(circle,#ec4899 0%,transparent 68%);
+  animation:orbDrift 10s ease-in-out -2s infinite alternate-reverse;
 }
 .card{
   background:#1a1a2e;
@@ -22,9 +37,25 @@ body{
   max-width:430px;width:100%;
   text-align:center;
   box-shadow:0 24px 80px rgba(0,0,0,.6);
-  animation:fadeIn .4s ease;
+  position:relative;z-index:1;
+  animation:fadeIn .6s cubic-bezier(.2,.8,.2,1),cardGlow 3s ease-in-out infinite 0.6s;
 }
-@keyframes fadeIn{from{opacity:0;transform:translateY(16px)}to{opacity:1;transform:translateY(0)}}
+@keyframes fadeIn{from{opacity:0;transform:translateY(22px) scale(.96)}to{opacity:1;transform:translateY(0) scale(1)}}
+@keyframes cardGlow{0%,100%{box-shadow:0 24px 80px rgba(0,0,0,.6)}50%{box-shadow:0 24px 90px rgba(168,85,247,.22)}}
+@keyframes orbDrift{from{transform:translate3d(-12px,8px,0) scale(.9)}to{transform:translate3d(18px,-16px,0) scale(1.12)}}
+.logo-lockup{position:relative;display:inline-flex;align-items:center;justify-content:center;margin-bottom:1rem}
+.logo-lockup::before{
+  content:"";position:absolute;width:98px;height:98px;border-radius:50%;
+  border:1px solid rgba(216,180,254,.55);box-shadow:0 0 28px rgba(168,85,247,.55);
+  animation:halo 2.2s ease-in-out infinite;
+}
+.brand-logo{
+  width:76px;height:76px;object-fit:cover;border-radius:22px;display:block;
+  box-shadow:0 10px 32px rgba(168,85,247,.42);
+  animation:logoFloat 2.8s ease-in-out infinite;
+}
+@keyframes halo{0%,100%{transform:scale(.88);opacity:.5}50%{transform:scale(1.14);opacity:1}}
+@keyframes logoFloat{0%,100%{transform:translateY(0) rotate(-2deg)}50%{transform:translateY(-7px) rotate(2deg)}}
 .logo{font-size:3rem;margin-bottom:.8rem;display:block}
 .movie-title{
   font-size:1.25rem;font-weight:700;
@@ -48,7 +79,9 @@ body{
   position:relative;display:inline-flex;
   align-items:center;justify-content:center;
   margin-bottom:1.4rem;
+  animation:ringFloat 2.4s ease-in-out infinite;
 }
+@keyframes ringFloat{0%,100%{transform:translateY(0)}50%{transform:translateY(-5px)}}
 .ring-svg{transform:rotate(-90deg)}
 .ring-bg{stroke:#252540}
 .ring-fg{
@@ -74,6 +107,18 @@ body{
   height:100%;
   background:linear-gradient(90deg,#a855f7,#ec4899);
   border-radius:99px;transition:width 1s linear;
+  position:relative;overflow:hidden;
+}
+.pbar::after{
+  content:"";position:absolute;inset:0;transform:translateX(-100%);
+  background:linear-gradient(90deg,transparent,rgba(255,255,255,.55),transparent);
+  animation:shimmer 1.8s linear infinite;
+}
+@keyframes shimmer{to{transform:translateX(100%)}}
+.btn-primary{
+  animation:readyPulse 1.4s ease-in-out infinite;
+}
+@keyframes readyPulse{0%,100%{box-shadow:0 6px 24px rgba(168,85,247,.4)}50%{box-shadow:0 8px 34px rgba(236,72,153,.62)}}
 }
 
 /* info box */
@@ -150,7 +195,9 @@ body{
   <a href="https://t.me/{{ bot_username }}" class="btn btn-back">🤖 বটে ফিরুন</a>
 
 {% else %}
-  <span class="logo">🎬</span>
+   <div class="logo-lockup">
+     <img class="brand-logo" src="/miniapp/assets/moviex-hub-logo.jpg" alt="Moviex Hub Team">
+   </div>
   <div class="movie-title">{{ title }}</div>
   <span class="badge">{{ brand_name }}</span>
 
@@ -204,8 +251,10 @@ body{
   var pbar = document.getElementById('pbar');
   var btn = document.getElementById('btn-get');
   var tgLink = {{ tg_link | tojson }};
-  var completeUrl = {{ complete_url | tojson }};
+   var completeUrl = new URL({{ complete_url | tojson }}, window.location.href).href;
   var delivered = false;
+   var attempts = 0;
+   var deadline = Date.now() + (total * 1000);
 
   function completeDelivery(){
     if(delivered) return;
@@ -213,19 +262,30 @@ body{
     btn.className = 'btn btn-primary';
     btn.removeAttribute('href');
     btn.textContent = '📬 বটে ফাইল পাঠানো হচ্ছে...';
-    fetch(completeUrl, {
+     fetch(completeUrl, {
       method:'POST',
-      credentials:'same-origin',
+       credentials:'include',
       cache:'no-store',
       keepalive:true,
       headers:{'Content-Type':'application/json'}
     })
-      .then(function(response){ return response.json(); })
+       .then(function(response){
+         return response.text().then(function(text){
+           var data;
+           try { data = JSON.parse(text); } catch (e) { data = {}; }
+           return {ok: response.ok, data: data};
+         });
+       })
       .then(function(data){
-        if(data.ok){
+         if(data.ok && (data.data.ok || data.data.already_sent)){
           btn.textContent = '✅ মুভি বটের inbox-এ পাঠানো হয়েছে';
           var info = document.getElementById('delivery-info');
           if(info) info.innerHTML = '🎬 <strong>{{ title }}</strong><br>Telegram bot খুলে আপনার ফাইলটি দেখুন।';
+         } else if(attempts < 3) {
+           delivered = false;
+           attempts++;
+           btn.textContent = '⏳ আবার চেষ্টা হচ্ছে...';
+           setTimeout(completeDelivery, attempts * 1500);
         } else {
           delivered = false;
           btn.href = tgLink;
@@ -233,9 +293,16 @@ body{
         }
       })
       .catch(function(){
-        delivered = false;
-        btn.href = tgLink;
-        btn.textContent = '🎬 মুভি পান → Telegram খুলুন';
+         if(attempts < 3) {
+           delivered = false;
+           attempts++;
+           btn.textContent = '⏳ আবার চেষ্টা হচ্ছে...';
+           setTimeout(completeDelivery, attempts * 1500);
+         } else {
+           delivered = false;
+           btn.href = tgLink;
+           btn.textContent = '🎬 মুভি পান → Telegram খুলুন';
+         }
       });
   }
 
@@ -246,8 +313,9 @@ body{
     }
   });
 
-  function tick(){
-    if(remaining <= 0){
+   function tick(){
+     remaining = Math.max(0, Math.ceil((deadline - Date.now()) / 1000));
+     if(remaining <= 0){
       secsEl.textContent = '0';
       ring.style.strokeDashoffset = circum;
       pbar.style.width = '0%';
@@ -255,7 +323,6 @@ body{
       completeDelivery();
       return;
     }
-    remaining--;
     secsEl.textContent = remaining;
     var pct = remaining / total;
     ring.style.strokeDashoffset = ((1 - pct) * circum);
@@ -266,6 +333,9 @@ body{
     tick();
     if(remaining <= 0) clearInterval(timer);
   }, 1000);
+   document.addEventListener('visibilitychange', function(){
+     if(!document.hidden) tick();
+   });
 })();
 </script>
 {% endif %}

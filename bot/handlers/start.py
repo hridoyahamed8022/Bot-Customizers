@@ -45,13 +45,13 @@ async def track_user(message_or_cb) -> bool:
 
 
 DEFAULT_HOME_TEXT = (
-    "🎬 <b>Moviex Hub</b>\n"
+    "🎬 <b>Moviex Hub Team</b>\n"
     "ইংরেজিতে মুভির নাম লিখুন।\n"
     "উদাহরণ: <code>3 idiots</code>, <code>kgf</code>"
 )
 
 NEW_USER_WELCOME = (
-    "🎉 <b>Moviex Hub-এ স্বাগতম!</b>\n"
+    "🎉 <b>Moviex Hub Team-এ স্বাগতম!</b>\n"
     "ইংরেজিতে মুভির নাম লিখুন—ফাইল পাবেন। 🍿\n"
     "প্রথমবার চ্যানেলে জয়েন করতে হবে।"
 )

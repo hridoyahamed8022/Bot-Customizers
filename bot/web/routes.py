@@ -428,11 +428,10 @@ async def _bot_identity(request: web.Request) -> Tuple[str, str]:
     cached = request.app.get("bot_identity")
     if cached:
         return cached
-    name = await db.get_setting("bot_name", "Moviex Hub")
+    name = (await db.get_setting("bot_name", "Moviex Hub Team") or "Moviex Hub Team").strip()
     username = await db.get_setting("bot_username", "Moviex_hub_bot")
     try:
         me = await request.app["bot"].get_me()
-        name = me.first_name or me.username or name
         username = me.username or username
     except Exception:
         log.exception("Could not load live bot identity")
@@ -913,9 +912,13 @@ async def miniapp_complete_ad(request: web.Request) -> web.Response:
 
     if not await db.claim_ad_token(token):
         return web.json_response({"ok": True, "processing": True})
-    delivered = await deliver_movie(
-        _DirectTarget(request.app["bot"], row["user_id"]), row["movie_id"]
-    )
+    try:
+        delivered = await deliver_movie(
+            _DirectTarget(request.app["bot"], row["user_id"]), row["movie_id"]
+        )
+    except Exception:
+        log.exception("Ad delivery crashed: token=%s", token[:8])
+        delivered = False
     if not delivered:
         await db.release_ad_token(token)
         return web.json_response({"ok": False, "error": "ফাইল পাঠানো যায়নি।"}, status=502)
@@ -1833,7 +1836,7 @@ async def settings_page(request: web.Request) -> web.Response:
         db.get_maintenance_until(),
         db.get_discussion_url(),
         db.get_setting("ad_enabled", "0"),
-        db.get_setting("ad_wait_seconds", "30"),
+        db.get_setting("ad_wait_seconds", "10"),
         db.get_setting("bot_username", "Moviex_hub_bot"),
     )
     # Auto-expire check
@@ -1859,7 +1862,7 @@ async def settings_page(request: web.Request) -> web.Response:
             "discussion_url": disc_url,
             "flash": _read_flash(request),
             "ad_enabled": (ad_enabled_val == "1"),
-            "ad_wait_seconds": int(ad_wait_secs_val or 30),
+            "ad_wait_seconds": int(ad_wait_secs_val or 10),
             "bot_username_setting": bot_username_val or "Moviex_hub_bot",
             "public_url": settings.public_url,
         },
@@ -1967,7 +1970,7 @@ async def ad_page(request: web.Request) -> web.Response:
         5,
         min(
             300,
-            int(stored_wait or await db.get_setting("ad_wait_seconds", "30") or 30),
+             int(stored_wait or await db.get_setting("ad_wait_seconds", "10") or 10),
         ),
     )
     circumference = round(2 * _math.pi * 56, 2)
@@ -2024,9 +2027,9 @@ async def settings_ad_save(request: web.Request) -> web.Response:
     prev_enabled = await db.get_setting("ad_enabled", "0")
     ad_enabled = "1" if data.get("ad_enabled") else "0"
     try:
-        wait_secs = max(5, min(300, int(data.get("ad_wait_seconds") or 30)))
+        wait_secs = max(5, min(300, int(data.get("ad_wait_seconds") or 10)))
     except (ValueError, TypeError):
-        wait_secs = 30
+        wait_secs = 10
     bot_username = (data.get("bot_username") or "Moviex_hub_bot").strip().lstrip("@")
     await db.set_setting("ad_enabled", ad_enabled)
     await db.set_setting("ad_wait_seconds", str(wait_secs))

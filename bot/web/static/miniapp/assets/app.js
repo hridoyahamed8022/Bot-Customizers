@@ -14,7 +14,7 @@
     category: "", query: "", selected: null, detail: null, adUrl: "",
     profileFavorites: [], mayaHistory: []
   };
-  let brandName = "Moviex Hub";
+  let brandName = "Moviex Hub Team";
   const $ = (id) => document.getElementById(id);
   const home = $("home-screen");
   const detailScreen = $("detail-screen");
@@ -182,7 +182,7 @@
       const data = await api("/api/miniapp/config", { cache: "no-store" });
       applyBrand(data.brand_name);
     } catch (error) {
-      // Static Moviex Hub fallback keeps the app usable if Telegram is offline.
+      // Static Moviex Hub Team fallback keeps the app usable if Telegram is offline.
     }
   }
   function showModal(id) { $(id).classList.remove("hidden"); }
@@ -225,7 +225,7 @@
     try {
       const data = await api("/api/miniapp/profile", { headers: headers(), cache: "no-store" });
       $("profile-name").textContent = data.profile.name || "Guest";
-      $("profile-handle").textContent = data.profile.username ? "@" + data.profile.username : "Moviex Hub user";
+      $("profile-handle").textContent = data.profile.username ? "@" + data.profile.username : "Moviex Hub Team user";
       $("profile-avatar").textContent = initials(data.profile.name || "G");
       renderProfileStats(data.stats || {});
       state.profileFavorites = data.favorites || [];

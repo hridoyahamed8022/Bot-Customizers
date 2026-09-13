@@ -40,13 +40,24 @@ _SENDERS = {
 }
 
 
+async def _safe_notice(target, text: str, *, show_alert: bool = False) -> None:
+    """Never let a Telegram error notification break the delivery flow."""
+    try:
+        if isinstance(target, CallbackQuery):
+            await target.answer(text, show_alert=show_alert)
+        else:
+            await target.answer(text)
+    except Exception:
+        log.debug("Could not send delivery notice", exc_info=True)
+
+
 async def deliver_movie(target, movie_id: int) -> bool:
     movie = await db.get_movie(movie_id)
     if not movie:
-        if isinstance(target, CallbackQuery):
-            await target.answer("⚠️ এই ফাইলটি লাইব্রেরিতে আর নেই।", show_alert=True)
-        else:
-            await target.answer("⚠️ এই ফাইলটি লাইব্রেরিতে আর নেই।")
+        await _safe_notice(
+            target, "⚠️ এই ফাইলটি লাইব্রেরিতে আর নেই।",
+            show_alert=isinstance(target, CallbackQuery),
+        )
         return False
 
     bot = target.bot
@@ -85,7 +96,7 @@ async def deliver_movie(target, movie_id: int) -> bool:
         asyncio.create_task(db.fulfill_user_notifications(chat_id))
 
         if isinstance(target, CallbackQuery):
-            await target.answer("✅ পাঠানো হয়েছে", show_alert=False)
+            await _safe_notice(target, "✅ পাঠানো হয়েছে")
 
         # মুভি ফাইল কয়েক সেকেন্ড পর ডিলিট, প্রতি সেকেন্ডে সতর্কবার্তা সহ
         if sent:
@@ -96,21 +107,19 @@ async def deliver_movie(target, movie_id: int) -> bool:
 
     except TelegramBadRequest as exc:
         log.warning("Failed to deliver movie %s: %s", movie_id, exc)
-        msg = "❌ দুঃখিত, ফাইলটি এখন পাঠানো যাচ্ছে না।"
-        if isinstance(target, CallbackQuery):
-            await target.answer(msg, show_alert=True)
-        else:
-            await target.answer(msg)
+        await _safe_notice(
+            target,
+            "❌ দুঃখিত, ফাইলটি এখন পাঠানো যাচ্ছে না।",
+            show_alert=isinstance(target, CallbackQuery),
+        )
         return False
     except Exception:
         log.exception("Unexpected delivery failure")
-        if isinstance(target, CallbackQuery):
-            await target.answer("❌ ফাইল পাঠানো যায়নি।", show_alert=True)
-        else:
-            try:
-                await target.answer("❌ ফাইল পাঠানো যায়নি।")
-            except Exception:
-                pass
+        await _safe_notice(
+            target,
+            "❌ ফাইল পাঠানো যায়নি।",
+            show_alert=isinstance(target, CallbackQuery),
+        )
         return False
 
 
@@ -186,7 +195,7 @@ async def send_ad_link(callback: CallbackQuery, movie_id: int) -> None:
         await callback.answer("⚠️ এই ফাইলটি লাইব্রেরিতে আর নেই।", show_alert=True)
         return
 
-    wait_secs = max(5, int(await db.get_setting("ad_wait_seconds", "20") or 20))
+    wait_secs = max(5, int(await db.get_setting("ad_wait_seconds", "10") or 10))
 
     public_url = cfg.public_url
     token = await db.create_ad_token(movie_id, callback.from_user.id, wait_secs)
