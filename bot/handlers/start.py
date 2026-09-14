@@ -19,6 +19,7 @@ from aiogram.utils.keyboard import InlineKeyboardBuilder
 
 from ..config import settings
 from ..db import db
+from ..movie_links import movie_web_url
 from ..utils import esc, schedule_delete, MSG_TTL
 from .common import watch_now_button
 
@@ -75,7 +76,7 @@ def home_kb(popular=None) -> InlineKeyboardMarkup:
     return kb.as_markup()
 
 
-def new_user_kb(popular=None) -> InlineKeyboardMarkup:
+async def new_user_kb(popular=None, user_id: int | None = None) -> InlineKeyboardMarkup:
     kb = InlineKeyboardBuilder()
     watch = watch_now_button()
     if watch:
@@ -83,7 +84,12 @@ def new_user_kb(popular=None) -> InlineKeyboardMarkup:
     if popular:
         for r in popular:
             emoji = {"video": "🎬", "document": "📁"}.get(r["file_type"], "🎥")
-            kb.button(text=f"{emoji} {r['title'][:50]}", callback_data=f"m:view:{r['id']}")
+            url = await movie_web_url(user_id, r["id"]) if user_id else ""
+            kb.button(
+                text=f"{emoji} {r['title'][:50]}",
+                url=url or None,
+                callback_data=None if url else f"m:view:{r['id']}",
+            )
         kb.adjust(1)
     kb.button(text="🔍 মুভি সার্চ করুন", callback_data="search:start")
     kb.button(text="ℹ️ কীভাবে ব্যবহার করব?", callback_data="ai:topic:howto")
@@ -162,7 +168,7 @@ async def cmd_start(
         sent = await message.answer(
             NEW_USER_WELCOME,
             parse_mode="HTML",
-            reply_markup=new_user_kb(popular),
+            reply_markup=await new_user_kb(popular, message.from_user.id),
         )
         asyncio.create_task(
             schedule_delete(message.bot, message.from_user.id, sent.message_id, MSG_TTL)
@@ -214,9 +220,11 @@ async def cb_popular(callback: CallbackQuery) -> None:
     kb = InlineKeyboardBuilder()
     for r in rows:
         emoji = {"video": "🎬", "document": "📁", "audio": "🎵"}.get(r["file_type"], "📦")
+        url = await movie_web_url(callback.from_user.id, r["id"])
         kb.button(
             text=f"{emoji} {r['title'][:50]}",
-            callback_data=f"m:view:{r['id']}",
+            url=url or None,
+            callback_data=None if url else f"m:view:{r['id']}",
         )
     kb.adjust(1)
     kb.row(InlineKeyboardButton(text="🏠 হোম", callback_data="home"))

@@ -25,6 +25,7 @@ from aiogram.types import (
 from aiogram.utils.keyboard import InlineKeyboardBuilder
 
 from ..db import db
+from ..movie_links import movie_web_url
 from ..utils import schedule_delete, MSG_TTL
 from .common import watch_now_button
 
@@ -284,12 +285,17 @@ _FILE_EMOJI = {
 }
 
 
-def _result_kb(found_rows: List[Any]) -> InlineKeyboardMarkup:
+async def _result_kb(found_rows: List[Any], user_id: int) -> InlineKeyboardMarkup:
     kb = InlineKeyboardBuilder()
     for r in found_rows[:8]:
         emoji = _FILE_EMOJI.get(r.get("file_type", ""), "📦")
         title = (r.get("title") or "")[:55]
-        kb.button(text=f"{emoji} {title}", callback_data=f"m:view:{r['id']}")
+        url = await movie_web_url(user_id, r["id"])
+        kb.button(
+            text=f"{emoji} {title}",
+            url=url or None,
+            callback_data=None if url else f"m:view:{r['id']}",
+        )
     kb.adjust(1)
     kb.row(
         InlineKeyboardButton(text="🎬 রিকোয়েস্ট করুন", callback_data="req:from_search"),
@@ -369,7 +375,7 @@ async def ai_chat_message(message: Message, state: FSMContext) -> None:
     await state.update_data(history=history)
 
     reply = answer[:4090] + "…" if len(answer) > 4090 else answer
-    kb = _result_kb(found_rows) if found_rows else _chat_kb()
+    kb = await _result_kb(found_rows, message.from_user.id) if found_rows else _chat_kb()
 
     try:
         sent = await thinking_msg.edit_text(reply, reply_markup=kb)

@@ -18,6 +18,7 @@ from aiogram.types import (
 from aiogram.utils.keyboard import InlineKeyboardBuilder
 
 from ..db import db
+from ..movie_links import movie_web_url
 from ..utils import esc, schedule_delete, MSG_TTL
 from .common import watch_now_button
 
@@ -163,8 +164,8 @@ async def _channel_buttons() -> list[InlineKeyboardButton]:
 # ============================================================ #
 # Keyboards
 # ============================================================ #
-def _results_kb(rows, page: int, total: int,
-                channel_btns: list | None = None) -> InlineKeyboardMarkup:
+async def _results_kb(rows, page: int, total: int, user_id: int,
+                      channel_btns: list | None = None) -> InlineKeyboardMarkup:
     kb = InlineKeyboardBuilder()
     for r in rows:
         emoji = {
@@ -172,7 +173,12 @@ def _results_kb(rows, page: int, total: int,
             "animation": "🎞", "voice": "🎙", "video_note": "🎥", "photo": "🖼",
         }.get(r["file_type"], "📦")
         title = r["title"][:55]
-        kb.button(text=f"{emoji} {title}", callback_data=f"m:view:{r['id']}")
+        url = await movie_web_url(user_id, r["id"])
+        kb.button(
+            text=f"{emoji} {title}",
+            url=url or None,
+            callback_data=None if url else f"m:view:{r['id']}",
+        )
     kb.adjust(1)
 
     pages = max(1, (total + PAGE - 1) // PAGE)
@@ -199,7 +205,7 @@ def _results_kb(rows, page: int, total: int,
     return kb.as_markup()
 
 
-def _no_results_kb(suggestions=None, query: str = "",
+async def _no_results_kb(suggestions=None, query: str = "", user_id: int = 0,
                    channel_btns: list | None = None) -> InlineKeyboardMarkup:
     kb = InlineKeyboardBuilder()
     if suggestions:
@@ -208,9 +214,11 @@ def _no_results_kb(suggestions=None, query: str = "",
                 "video": "🎬", "document": "📁", "audio": "🎵",
                 "animation": "🎞",
             }.get(r["file_type"], "📦")
+            url = await movie_web_url(user_id, r["id"])
             kb.button(
                 text=f"{emoji} {r['title'][:50]}",
-                callback_data=f"m:view:{r['id']}",
+                url=url or None,
+                callback_data=None if url else f"m:view:{r['id']}",
             )
         kb.adjust(1)
     # "not found" page থেকে request করলে lastq-ই সঠিক movie name
@@ -262,7 +270,7 @@ async def _do_search(message_or_cb, query: str, page: int = 0) -> None:
         if channel_btns:
             text += "\n\n📢 আমাদের চ্যানেল"
 
-        kb = _no_results_kb(suggestions, query, channel_btns)
+        kb = await _no_results_kb(suggestions, query, user_id, channel_btns)
         if isinstance(message_or_cb, CallbackQuery):
             try:
                 await message_or_cb.message.edit_text(text, reply_markup=kb)
@@ -284,7 +292,7 @@ async def _do_search(message_or_cb, query: str, page: int = 0) -> None:
     if channel_btns:
         text += "\n\n📢 আমাদের চ্যানেল"
 
-    kb = _results_kb(rows, page, total, channel_btns)
+    kb = await _results_kb(rows, page, total, user_id, channel_btns)
     if isinstance(message_or_cb, CallbackQuery):
         try:
             await message_or_cb.message.edit_text(text, reply_markup=kb)

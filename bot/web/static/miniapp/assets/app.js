@@ -12,7 +12,8 @@
   const state = {
     movies: [], recent: [], trending: [], upcoming: [], categories: [],
     category: "", query: "", selected: null, detail: null, adUrl: "",
-    profileFavorites: [], recentDownloads: [], mayaHistory: [], adWait: 10
+    profileFavorites: [], recentDownloads: [], mayaHistory: [], adWait: 10,
+    adToken: new URLSearchParams(window.location.search).get("token") || ""
   };
   let brandName = "Moviex Hub Team";
   const $ = (id) => document.getElementById(id);
@@ -175,6 +176,11 @@
       state.categories = movies.categories || [];
       state.upcoming = upcoming.upcoming || [];
       renderHome();
+      const requestedId = Number(new URLSearchParams(window.location.search).get("movie") || 0);
+      const requestedMovie = requestedId
+        ? state.movies.find((movie) => movie.id === requestedId)
+        : null;
+      if (requestedMovie) openDetail(requestedMovie);
     } catch (error) {
       $("count").textContent = "সমস্যা";
       showToast(error.message || "ডাটা লোড করা যায়নি।");
@@ -315,7 +321,8 @@
     $("detail-title").textContent = movie.title;
     $("detail-meta").textContent = formatHits(movie.hits) + "  ·  " + (movie.file_type || "Video").toUpperCase();
     $("detail-caption").textContent = movie.caption || "মুভিটি পেতে Download বাটনে চাপুন।";
-    $("detail-gate-copy").textContent = "🔒 Ad দেখে " + state.adWait + " সেকেন্ড অপেক্ষা করলেই movie আপনার inbox-এ যাবে।";
+    $("detail-gate-copy").textContent = "🔒 এই movie পেতে web page থেকেই ad দেখে " +
+      state.adWait + " সেকেন্ড অপেক্ষা করুন—তারপর Telegram inbox-এ file যাবে।";
     $("favorite-button").innerHTML = "♡ <span>Like</span>";
     renderStars(0);
     renderComments([]);
@@ -389,14 +396,20 @@
   });
   $("quality-button").addEventListener("click", async () => {
     if (!state.selected) return;
-    if (!tg || !tg.initData) return showToast("বটের ভেতর থেকে Download করুন।");
+    if (!state.adToken && (!tg || !tg.initData)) {
+      return showToast("বটের ভেতর থেকে Download করুন।");
+    }
     $("quality-button").disabled = true;
     $("quality-button").querySelector("span").textContent = "লিংক তৈরি হচ্ছে...";
     try {
-      const data = await api("/api/miniapp/claim", {
-        method: "POST", headers: headers(), body: JSON.stringify({ movie_id: state.selected.id })
-      });
-      state.adUrl = data.ad_url;
+      if (state.adToken) {
+        state.adUrl = new URL("/ad/" + encodeURIComponent(state.adToken), window.location.href).href;
+      } else {
+        const data = await api("/api/miniapp/claim", {
+          method: "POST", headers: headers(), body: JSON.stringify({ movie_id: state.selected.id })
+        });
+        state.adUrl = data.ad_url;
+      }
       hideModal("quality-modal");
       showModal("unlock-modal");
     } catch (error) { showToast(error.message); }

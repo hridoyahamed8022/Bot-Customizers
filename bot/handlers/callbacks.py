@@ -11,6 +11,7 @@ from aiogram.types import CallbackQuery, Message, InlineKeyboardButton
 from aiogram.utils.keyboard import InlineKeyboardBuilder
 
 from ..db import db
+from ..movie_links import movie_web_url
 from ..config import settings as cfg
 from ..middlewares.maintenance import build_maint_text, build_maint_kb
 from ..utils import esc, schedule_delete, movie_delete_countdown, MOVIE_TTL, MSG_TTL
@@ -242,6 +243,14 @@ async def cb_movie_preview(callback: CallbackQuery) -> None:
     if not movie:
         await callback.answer("মুভিটি আর পাওয়া যাচ্ছে না।", show_alert=True)
         return
+
+    web_url = await movie_web_url(callback.from_user.id, movie_id)
+    if web_url:
+        try:
+            await callback.answer(url=web_url)
+            return
+        except TelegramBadRequest:
+            log.debug("Could not open direct movie URL from callback", exc_info=True)
 
     wait_secs = max(5, int(await db.get_setting("ad_wait_seconds", "10") or 10))
     description = (movie["caption"] or "").strip()

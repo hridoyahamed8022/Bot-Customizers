@@ -9,6 +9,7 @@ To monetize a Telegram bot via ad views without trusting a client-side redirect,
 2. Send the user a link to a **public, unauthenticated** web route `/ad/{token}` (must not require the admin panel's login).
 3. That page renders a client-side countdown (seconds configurable via an admin setting). Only after the countdown elapses does it POST to `/ad/{token}/complete`; the server loads the token's stored Telegram user ID and sends the resource directly to that inbox.
 4. Claim the token atomically before sending and mark it used only after a successful send. Keep the validated `https://t.me/{bot_username}?start=get_{token}` handler as a fallback for browsers where direct completion fails.
+5. For bot search results that should open a web detail page first, create the user-bound token when building the result keyboard and pass it as `/miniapp/?movie={id}&token={token}`. The page can then open the movie detail automatically and reuse that token for the ad page.
 
 **Why:** This avoids depending on external ad-shortlink providers, keeps all state in the bot's own DB, and prevents replay/sharing since tokens are single-use and user-bound. The client-side timer is only UX; the server-side token state and expiry are the security boundary.
 
