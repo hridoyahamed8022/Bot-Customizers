@@ -12,7 +12,7 @@
   const state = {
     movies: [], recent: [], trending: [], upcoming: [], categories: [],
     category: "", query: "", selected: null, detail: null, adUrl: "",
-    profileFavorites: [], mayaHistory: []
+    profileFavorites: [], recentDownloads: [], mayaHistory: [], adWait: 10
   };
   let brandName = "Moviex Hub Team";
   const $ = (id) => document.getElementById(id);
@@ -26,7 +26,7 @@
   window.setTimeout(() => {
     const splash = $("app-splash");
     if (splash) splash.classList.add("hidden");
-  }, 2200);
+  }, 4800);
 
   function escapeHtml(value) {
     return String(value || "").replace(/[&<>"']/g, (char) =>
@@ -109,11 +109,14 @@
       escapeHtml(movie.title) + "</h3><p>" + escapeHtml(movie.category || "মুভি") + "</p></div></div></button>";
   }
   function upcomingCard(item) {
+    const release = item.release_date || "তারিখ শিগগিরই";
+    const description = item.description || "নতুন movie আসছে—আপডেট পেতে Moviex Hub Team-এ থাকুন।";
     return '<button type="button" class="movie-card upcoming-card" data-upcoming-id="' + item.id + '">' +
       '<div class="poster">' + posterMarkup(item) +
-      '<span class="release-badge">' + escapeHtml(item.release_date || "Coming soon") + "</span></div>" +
+      '<span class="release-badge">🗓 ' + escapeHtml(release) + "</span></div>" +
       '<div class="movie-info"><span class="movie-avatar">MB</span><div><h3>' +
-      escapeHtml(item.title) + "</h3><p>" + escapeHtml(item.category || "Upcoming") + "</p></div></div></button>";
+      escapeHtml(item.title) + "</h3><p>" + escapeHtml(item.category || "Upcoming") +
+      '</p><small class="upcoming-description">' + escapeHtml(description) + "</small></div></div></button>";
   }
   function bindCards(container) {
     $(container).querySelectorAll(".movie-card").forEach((button) => {
@@ -181,6 +184,10 @@
     try {
       const data = await api("/api/miniapp/config", { cache: "no-store" });
       applyBrand(data.brand_name);
+      state.adWait = Number(data.ad_wait_seconds || 10);
+      $("unlock-copy").textContent = "To unlock this file, wait " + state.adWait + " seconds on the link below.";
+      $("how-to-copy").innerHTML = "<strong>ⓘ How to download:</strong><br>Click the button, wait " +
+        state.adWait + "s on the unlock page, then the file will appear in your Telegram inbox.";
     } catch (error) {
       // Static Moviex Hub Team fallback keeps the app usable if Telegram is offline.
     }
@@ -210,12 +217,17 @@
   }
   function renderProfileStats(stats) {
     const items = [
-      ["downloads", "Downloads"], ["requests", "Requests"],
-      ["favorites", "My List"], ["warnings", "Warnings"]
+      ["downloads", "ডাউনলোড"], ["requests", "রিকোয়েস্ট"],
+      ["favorites", "My List"], ["warnings", "সতর্কতা"],
+      ["subscribed", stats.subscribed ? "Verified" : "Member"]
     ];
-    $("profile-stats").innerHTML = items.map((item) =>
-      '<div class="profile-stat"><strong>' + (stats[item[0]] || 0) +
-      '</strong><span>' + item[1] + "</span></div>").join("");
+    $("profile-stats").innerHTML = items.map((item) => {
+      const value = item[0] === "subscribed"
+        ? (stats.subscribed ? "✓" : "—")
+        : (stats[item[0]] || 0);
+      return '<div class="profile-stat"><strong>' + value +
+        '</strong><span>' + item[1] + "</span></div>";
+    }).join("");
   }
   async function showProfile() {
     hideMainScreens();
@@ -227,12 +239,21 @@
       $("profile-name").textContent = data.profile.name || "Guest";
       $("profile-handle").textContent = data.profile.username ? "@" + data.profile.username : "Moviex Hub Team user";
       $("profile-avatar").textContent = initials(data.profile.name || "G");
+      $("profile-badge").textContent = data.stats && data.stats.subscribed ? "✓ Verified member" : "Movie lover";
+      $("profile-summary").textContent = (data.stats && data.stats.downloads)
+        ? "আপনার পছন্দের movie আর download history এক জায়গায়।"
+        : "Movie save করুন, rate দিন আর নতুন release-এর খবর রাখুন।";
       renderProfileStats(data.stats || {});
       state.profileFavorites = data.favorites || [];
+      state.recentDownloads = data.recent_downloads || [];
       $("profile-favorite-count").textContent = state.profileFavorites.length;
+      $("profile-download-count").textContent = state.recentDownloads.length;
       $("profile-favorites").innerHTML = state.profileFavorites.map((movie) => movieCard(movie, false)).join("");
       $("profile-empty").classList.toggle("hidden", state.profileFavorites.length > 0);
       bindCards("profile-favorites");
+      $("profile-downloads").innerHTML = state.recentDownloads.map((movie) => movieCard(movie, true)).join("");
+      $("profile-download-empty").classList.toggle("hidden", state.recentDownloads.length > 0);
+      bindCards("profile-downloads");
     } catch (error) {
       $("profile-favorites").innerHTML = '<div class="empty-state"><p>' +
         escapeHtml(error.message || "Profile লোড করা যায়নি।") + "</p></div>";
@@ -294,6 +315,7 @@
     $("detail-title").textContent = movie.title;
     $("detail-meta").textContent = formatHits(movie.hits) + "  ·  " + (movie.file_type || "Video").toUpperCase();
     $("detail-caption").textContent = movie.caption || "মুভিটি পেতে Download বাটনে চাপুন।";
+    $("detail-gate-copy").textContent = "🔒 Ad দেখে " + state.adWait + " সেকেন্ড অপেক্ষা করলেই movie আপনার inbox-এ যাবে।";
     $("favorite-button").innerHTML = "♡ <span>Like</span>";
     renderStars(0);
     renderComments([]);
@@ -383,7 +405,7 @@
   $("open-ad-button").addEventListener("click", () => {
     if (!state.adUrl) return showToast("লিংক তৈরি হয়নি।");
     hideModal("unlock-modal");
-    showToast("Sending File... ১০ সেকেন্ড পরে bot inbox দেখুন।");
+    showToast("Sending File... " + state.adWait + " সেকেন্ড পরে bot inbox দেখুন।");
     if (tg && tg.openLink) tg.openLink(state.adUrl);
     else window.location.href = state.adUrl;
   });

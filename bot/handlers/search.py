@@ -172,7 +172,7 @@ def _results_kb(rows, page: int, total: int,
             "animation": "🎞", "voice": "🎙", "video_note": "🎥", "photo": "🖼",
         }.get(r["file_type"], "📦")
         title = r["title"][:55]
-        kb.button(text=f"{emoji} {title}", callback_data=f"m:get:{r['id']}")
+        kb.button(text=f"{emoji} {title}", callback_data=f"m:view:{r['id']}")
     kb.adjust(1)
 
     pages = max(1, (total + PAGE - 1) // PAGE)
@@ -210,7 +210,7 @@ def _no_results_kb(suggestions=None, query: str = "",
             }.get(r["file_type"], "📦")
             kb.button(
                 text=f"{emoji} {r['title'][:50]}",
-                callback_data=f"m:get:{r['id']}",
+                callback_data=f"m:view:{r['id']}",
             )
         kb.adjust(1)
     # "not found" page থেকে request করলে lastq-ই সঠিক movie name

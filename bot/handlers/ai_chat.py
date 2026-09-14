@@ -5,9 +5,11 @@ import asyncio
 import json
 import logging
 import os
+import re
 from datetime import date
 from typing import Any, Dict, List, Optional, Tuple
 
+import aiohttp
 from aiogram import F, Router
 from aiogram.enums import ChatAction
 from aiogram.exceptions import TelegramBadRequest
@@ -31,6 +33,9 @@ router = Router(name="ai_chat")
 
 _OPENAI_BASE_URL = os.getenv("AI_INTEGRATIONS_OPENAI_BASE_URL", "").strip()
 _OPENAI_API_KEY  = os.getenv("AI_INTEGRATIONS_OPENAI_API_KEY", "sk-dummy").strip()
+_GEMINI_API_KEY = os.getenv("GEMINI_API_KEY", "").strip()
+_GEMINI_MODEL = "gemini-2.5-flash"
+_GEMINI_UNAVAILABLE = False
 
 _TODAY = date.today().isoformat()
 
@@ -118,6 +123,99 @@ async def _exec_bot_stats() -> str:
     return "\n".join(lines)
 
 
+async def _local_maya(
+    user_message: str,
+) -> Tuple[str, List[Any]]:
+    """Useful database assistant when no external model is available."""
+    text = (user_message or "").strip()
+    search_hint = re.sub(r"[^A-Za-z0-9 .,'!?&():_-]+", " ", text).strip()
+    found_rows = await db.search_movies(search_hint or text, limit=8, offset=0)
+    if found_rows:
+        return (
+            f"✅ “{text}” নামে {len(found_rows)}টি movie পেয়েছি।\n"
+            "নিচের title-এ চাপুন। File পেতে আগে ad দেখে Download করতে হবে।",
+            found_rows,
+        )
+
+    lower = text.lower()
+    if any(word in lower for word in ("popular", "জনপ্রিয়", "trending", "হিট")):
+        rows = await db.get_popular_movies(limit=8)
+        return "🔥 এগুলো এখন সবচেয়ে জনপ্রিয়। নিচে movie বেছে নিন।", rows
+    if any(word in lower for word in ("upcoming", "আসছে", "নতুন", "release")):
+        await db.list_upcoming_movies(8)
+        return "✨ সামনে আসছে এমন movie-গুলোর তালিকা Upcoming section-এ দেখুন।", []
+    if any(word in lower for word in ("stat", "কত", "মোট", "stats")):
+        return await _exec_bot_stats(), []
+    return (
+        "আমি Maya। Movie-এর English নাম লিখে search করুন—"
+        "result-এর title-এ চাপলে detail page খুলবে। File পেতে ad দেখে Download করতে হবে।",
+        [],
+    )
+
+
+async def _ask_gemini(
+    history: List[Dict[str, Any]],
+    user_message: str,
+) -> Tuple[str, List[Any]]:
+    """Gemini-backed Maya fallback for deployments without the Replit AI proxy."""
+    found_rows: List[Any] = []
+    global _GEMINI_UNAVAILABLE
+    if not _GEMINI_API_KEY or _GEMINI_UNAVAILABLE:
+        return await _local_maya(user_message)
+
+    try:
+        search_hint = re.sub(r"[^A-Za-z0-9 .,'!?&():_-]+", " ", user_message).strip()
+        found_rows = await db.search_movies(search_hint or user_message, limit=8, offset=0)
+        context = "কোনো সরাসরি database match নেই।"
+        if found_rows:
+            context = "Database-এ পাওয়া movie:\n" + "\n".join(
+                f"- {row['title']} (id: {row['id']})" for row in found_rows
+            )
+
+        contents: List[Dict[str, Any]] = []
+        for item in history[-_MAX_HISTORY:]:
+            role = "model" if item.get("role") == "assistant" else "user"
+            contents.append({
+                "role": role,
+                "parts": [{"text": str(item.get("content", ""))[:1200]}],
+            })
+        contents.append({
+            "role": "user",
+            "parts": [{
+                "text": (
+                    f"{user_message}\n\n"
+                    f"{context}\n\n"
+                    "Database match থাকলে শুধু সেগুলো নিয়েই সাহায্য করো। "
+                    "ফাইল পেতে ad দেখে Download চাপতে হবে—এটি পরিষ্কার করে বলো।"
+                ),
+            }],
+        })
+        payload = {
+            "system_instruction": {"parts": [{"text": _SYSTEM_PROMPT}]},
+            "contents": contents,
+            "generationConfig": {"temperature": 0.65, "maxOutputTokens": 8192},
+        }
+        url = (
+            f"https://generativelanguage.googleapis.com/v1beta/models/"
+            f"{_GEMINI_MODEL}:generateContent?key={_GEMINI_API_KEY}"
+        )
+        timeout = aiohttp.ClientTimeout(total=25)
+        async with aiohttp.ClientSession(timeout=timeout) as session:
+            async with session.post(url, json=payload) as response:
+                if response.status >= 400:
+                    log.warning("Gemini request returned HTTP %s", response.status)
+                    _GEMINI_UNAVAILABLE = True
+                    return await _local_maya(user_message)
+                data = await response.json()
+        candidates = data.get("candidates") or []
+        parts = ((candidates[0].get("content") or {}).get("parts") or []) if candidates else []
+        reply = "".join(str(part.get("text", "")) for part in parts).strip()
+        return reply or "উত্তর পাওয়া যায়নি।", found_rows
+    except Exception as exc:
+        log.warning("Gemini call failed: %s", exc)
+        return await _local_maya(user_message)
+
+
 async def _ask_openai(
     history: List[Dict[str, Any]],
     user_message: str,
@@ -125,73 +223,44 @@ async def _ask_openai(
     found_rows: List[Any] = []
 
     if not _OPENAI_BASE_URL:
-        return "দুঃখিত, AI সার্ভিস এই মুহূর্তে পাওয়া যাচ্ছে না।", found_rows
+        return await _ask_gemini(history, user_message)
     try:
         from openai import AsyncOpenAI
         client = AsyncOpenAI(api_key=_OPENAI_API_KEY, base_url=_OPENAI_BASE_URL)
 
+        search_hint = re.sub(r"[^A-Za-z0-9 .,'!?&():_-]+", " ", user_message).strip()
+        found_rows = await db.search_movies(search_hint or user_message, limit=8, offset=0)
+        if found_rows:
+            context = "Database-এ পাওয়া movie:\n" + "\n".join(
+                f"- {row['title']} (id: {row['id']})" for row in found_rows
+            )
+        else:
+            context = "Database-এ সরাসরি match পাওয়া যায়নি।"
+
         messages: List[Dict[str, Any]] = [{"role": "system", "content": _SYSTEM_PROMPT}]
         messages.extend(history[-(_MAX_HISTORY * 2):])
-        messages.append({"role": "user", "content": user_message})
-
-        last_content = ""
-
-        for _ in range(4):
-            resp = await client.chat.completions.create(
-                model="gpt-4o-mini",
-                messages=messages,
-                tools=_TOOLS,
-                tool_choice="auto",
-                max_completion_tokens=600,
-                temperature=0.65,
-            )
-            choice = resp.choices[0]
-            last_content = choice.message.content or ""
-
-            if choice.finish_reason != "tool_calls":
-                return last_content or "উত্তর পাওয়া যায়নি।", found_rows
-
-            assistant_msg: Dict[str, Any] = {
-                "role": "assistant",
-                "content": last_content,
-                "tool_calls": [
-                    {
-                        "id": tc.id,
-                        "type": "function",
-                        "function": {"name": tc.function.name, "arguments": tc.function.arguments},
-                    }
-                    for tc in (choice.message.tool_calls or [])
-                ],
-            }
-            messages.append(assistant_msg)
-
-            tool_tasks = []
-            tool_call_ids = []
-            for tc in (choice.message.tool_calls or []):
-                fn = tc.function.name
-                try:
-                    args = json.loads(tc.function.arguments or "{}")
-                except Exception:
-                    args = {}
-                tool_call_ids.append(tc.id)
-                if fn == "search_movies_in_db":
-                    tool_tasks.append(_exec_search(args.get("query", ""), found_rows))
-                elif fn == "get_bot_stats":
-                    tool_tasks.append(_exec_bot_stats())
-                else:
-                    async def _unknown():
-                        return "অজানা ফাংশন।"
-                    tool_tasks.append(_unknown())
-
-            results = await asyncio.gather(*tool_tasks)
-            for tc_id, result in zip(tool_call_ids, results):
-                messages.append({"role": "tool", "tool_call_id": tc_id, "content": result})
-
-        return last_content or "উত্তর পাওয়া যায়নি।", found_rows
+        messages.append({
+            "role": "user",
+            "content": (
+                f"{user_message}\n\n{context}\n\n"
+                "Database match থাকলে শুধু সেগুলো নিয়ে সাহায্য করো। "
+                "ফাইল পেতে ad দেখে Download চাপতে হবে—এটি পরিষ্কার করে বলো।"
+            ),
+        })
+        resp = await client.chat.completions.create(
+            model="gpt-4o-mini",
+            messages=messages,
+            max_completion_tokens=8192,
+            temperature=0.65,
+        )
+        reply = (resp.choices[0].message.content or "").strip()
+        return reply or "উত্তর পাওয়া যায়নি।", found_rows
 
     except Exception as exc:
         log.exception("OpenAI call failed: %s", exc)
-        return "😔 একটু সমস্যা হচ্ছে। কিছুক্ষণ পর আবার চেষ্টা করো।", found_rows
+        if _GEMINI_API_KEY:
+            return await _ask_gemini(history, user_message)
+        return await _local_maya(user_message)
 
 
 class AIChatState(StatesGroup):
@@ -220,7 +289,7 @@ def _result_kb(found_rows: List[Any]) -> InlineKeyboardMarkup:
     for r in found_rows[:8]:
         emoji = _FILE_EMOJI.get(r.get("file_type", ""), "📦")
         title = (r.get("title") or "")[:55]
-        kb.button(text=f"{emoji} {title}", callback_data=f"m:get:{r['id']}")
+        kb.button(text=f"{emoji} {title}", callback_data=f"m:view:{r['id']}")
     kb.adjust(1)
     kb.row(
         InlineKeyboardButton(text="🎬 রিকোয়েস্ট করুন", callback_data="req:from_search"),

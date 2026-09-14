@@ -24,7 +24,7 @@ button { color: inherit; cursor: pointer; }
   overflow: hidden; background:
     radial-gradient(circle at 50% 42%, rgba(131, 100, 72, .18), transparent 34%),
     radial-gradient(circle at 50% 100%, rgba(255, 61, 113, .14), transparent 45%), #05070b;
-  animation: splash-out .7s cubic-bezier(.4,0,.2,1) 1.35s forwards;
+  animation: splash-out .8s cubic-bezier(.4,0,.2,1) 3.9s forwards;
 }
 .splash-halo {
   position: absolute; width: 310px; height: 310px; border: 1px solid rgba(255, 232, 202, .35);
@@ -135,11 +135,25 @@ button { color: inherit; cursor: pointer; }
 .maya-input { display: flex; gap: 7px; padding: 7px; border: 1px solid #30445e; border-radius: 15px; background: #111e30; }
 .maya-input input { flex: 1; min-width: 0; border: 0; outline: 0; background: transparent; color: white; font-size: 13px; }
 .maya-input button { width: 40px; border: 0; border-radius: 10px; background: #e94870; color: white; font-size: 17px; }
-.profile-stats { display: grid; grid-template-columns: repeat(4, 1fr); gap: 7px; margin-bottom: 22px; }
+.profile-heading-copy { min-width: 0; }
+.profile-badge { display: inline-block; margin-top: 6px; padding: 4px 8px; border: 1px solid rgba(255,177,72,.32); border-radius: 99px; background: rgba(255,135,46,.1); color: #ffc06d; font-size: 9px; font-weight: 800; }
+.profile-summary { margin: -5px 0 17px; color: #9badc1; font-size: 12px; line-height: 1.55; }
+.profile-stats { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 6px; margin-bottom: 23px; }
 .profile-stat { padding: 11px 5px; border: 1px solid var(--line); border-radius: 11px; background: #142236; text-align: center; }
 .profile-stat strong { display: block; color: white; font-size: 17px; }
-.profile-stat span { color: var(--muted); font-size: 9px; }
+.profile-stat span { color: var(--muted); font-size: 8px; white-space: nowrap; }
 .profile-section-title { margin-left: 0; margin-right: 0; }
+.profile-downloads { display: grid; gap: 9px; margin-bottom: 8px; }
+.profile-downloads .movie-card { display: flex; align-items: center; }
+.profile-downloads .poster { width: 82px; flex: 0 0 82px; aspect-ratio: 1 / 1; }
+.profile-downloads .movie-info { flex: 1; }
+.compact-empty { padding: 22px 12px 30px; }
+.upcoming-hero { display: flex; align-items: center; gap: 11px; margin: 0 15px 13px; padding: 13px; border: 1px solid rgba(103,210,255,.2); border-radius: 17px; background: linear-gradient(135deg, rgba(42,64,108,.75), rgba(28,31,62,.82)); }
+.upcoming-hero-icon { display: grid; flex: 0 0 39px; place-items: center; width: 39px; height: 39px; border-radius: 13px; background: linear-gradient(135deg,#65e4ff,#7774ff); color: white; font-size: 22px; box-shadow: 0 8px 20px rgba(80,160,255,.22); }
+.upcoming-hero h2 { margin: 0 0 3px; color: #f3f7ff; font-size: 15px; }
+.upcoming-hero p { margin: 0; color: #9eb1c8; font-size: 10px; }
+.upcoming-hero .count-pill { margin-left: auto; }
+.upcoming-description { display: -webkit-box; overflow: hidden; margin-top: 5px; color: #758aa4; font-size: 9px; line-height: 1.35; -webkit-box-orient: vertical; -webkit-line-clamp: 2; }
 .bottom-nav {
   position: fixed; right: 0; bottom: 0; left: 0; z-index: 9; display: flex; justify-content: center; min-height: 63px;
   background: #162333; border-top: 1px solid rgba(255,255,255,.06);
@@ -160,6 +174,7 @@ button { color: inherit; cursor: pointer; }
 .category-label { display: inline-block; margin-bottom: 9px; padding: 5px 9px; border: 1px solid rgba(70, 195, 247, .4); border-radius: 99px; color: #77d3f7; font-size: 10px; }
 .detail-body h1 { margin: 0 0 7px; font-size: 23px; line-height: 1.3; letter-spacing: -.04em; }
 .detail-meta { margin: 0 0 15px; color: #94a5b9; font-size: 11px; }
+.detail-gate-copy { margin: 0 0 14px; padding: 10px 11px; border: 1px solid rgba(255,178,64,.28); border-radius: 11px; background: rgba(255,153,45,.08); color: #ffc36e; font-size: 11px; line-height: 1.45; }
 .detail-actions { display: flex; gap: 9px; margin-bottom: 17px; }
 .primary-button, .secondary-button { flex: 1; min-height: 44px; border-radius: 12px; font-weight: 800; }
 .primary-button { border: 0; background: linear-gradient(135deg, #ff346f, #ff782a); color: white; box-shadow: 0 7px 22px rgba(255, 66, 103, .2); }

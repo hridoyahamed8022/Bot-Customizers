@@ -229,6 +229,46 @@ async def send_ad_link(callback: CallbackQuery, movie_id: int) -> None:
     )
 
 
+@router.callback_query(F.data.startswith("m:view:"))
+async def cb_movie_preview(callback: CallbackQuery) -> None:
+    """Search result opens a detail preview; the file stays behind the ad button."""
+    try:
+        movie_id = int(callback.data.split(":")[2])
+    except (IndexError, ValueError):
+        await callback.answer("ভুল মুভি আইডি।", show_alert=True)
+        return
+
+    movie = await db.get_movie(movie_id)
+    if not movie:
+        await callback.answer("মুভিটি আর পাওয়া যাচ্ছে না।", show_alert=True)
+        return
+
+    wait_secs = max(5, int(await db.get_setting("ad_wait_seconds", "10") or 10))
+    description = (movie["caption"] or "").strip()
+    text = (
+        f"🎬 <b>{esc(movie['title'])}</b>\n"
+        f"🏷 {esc(movie['category'] or 'মুভি')}\n"
+        f"👁 {int(movie['hits'] or 0)} views\n\n"
+        f"{esc(description[:900]) if description else 'এই মুভিটি এখন download-এর জন্য প্রস্তুত।'}\n\n"
+        f"🔒 <b>ফাইল পেতে আগে {wait_secs} সেকেন্ডের ad দেখুন।</b>\n"
+        "Ad শেষ হলে movie আপনার Telegram inbox-এ চলে যাবে।"
+    )
+    kb = InlineKeyboardBuilder()
+    kb.button(text="📺 Ad দেখে Download করুন", callback_data=f"m:get:{movie_id}")
+    kb.button(text="🔍 আবার সার্চ করুন", callback_data="search:start")
+    kb.button(text="🏠 হোম", callback_data="home")
+    kb.adjust(1)
+    try:
+        await callback.message.edit_text(
+            text, reply_markup=kb.as_markup(), parse_mode="HTML"
+        )
+    except TelegramBadRequest:
+        await callback.message.answer(
+            text, reply_markup=kb.as_markup(), parse_mode="HTML"
+        )
+    await callback.answer()
+
+
 async def deliver_movie_by_token(message: Message, token: str) -> None:
     """Ad countdown শেষে /start get_{token} থেকে movie পাঠায়।"""
     row = await db.get_ad_token(token)
@@ -265,8 +305,7 @@ async def cb_get_movie(callback: CallbackQuery) -> None:
         return
 
     ad_enabled = await db.get_setting("ad_enabled", "0")
-    vip = await db.is_vip(callback.from_user.id)
-    if ad_enabled == "1" and cfg.public_url and not vip:
+    if ad_enabled == "1" and cfg.public_url:
         await send_ad_link(callback, movie_id)
     else:
         await deliver_movie(callback, movie_id)

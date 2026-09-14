@@ -83,7 +83,7 @@ def new_user_kb(popular=None) -> InlineKeyboardMarkup:
     if popular:
         for r in popular:
             emoji = {"video": "🎬", "document": "📁"}.get(r["file_type"], "🎥")
-            kb.button(text=f"{emoji} {r['title'][:50]}", callback_data=f"m:get:{r['id']}")
+            kb.button(text=f"{emoji} {r['title'][:50]}", callback_data=f"m:view:{r['id']}")
         kb.adjust(1)
     kb.button(text="🔍 মুভি সার্চ করুন", callback_data="search:start")
     kb.button(text="ℹ️ কীভাবে ব্যবহার করব?", callback_data="ai:topic:howto")
@@ -216,7 +216,7 @@ async def cb_popular(callback: CallbackQuery) -> None:
         emoji = {"video": "🎬", "document": "📁", "audio": "🎵"}.get(r["file_type"], "📦")
         kb.button(
             text=f"{emoji} {r['title'][:50]}",
-            callback_data=f"m:get:{r['id']}",
+            callback_data=f"m:view:{r['id']}",
         )
     kb.adjust(1)
     kb.row(InlineKeyboardButton(text="🏠 হোম", callback_data="home"))

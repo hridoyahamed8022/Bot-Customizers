@@ -1175,6 +1175,22 @@ class Database:
             "subscribed": bool(sub_active and sub_active["active"]),
         }
 
+    async def get_user_recent_downloads(
+        self, user_id: int, limit: int = 8
+    ) -> List[aiosqlite.Row]:
+        return await self.fetch_all(
+            """
+            SELECT m.*
+            FROM logs l
+            JOIN movies m ON m.id = CAST(JSON_EXTRACT(l.payload, '$.movie_id') AS INTEGER)
+            WHERE l.kind='delivered'
+              AND CAST(JSON_EXTRACT(l.payload, '$.user_id') AS INTEGER)=?
+            ORDER BY l.created_at DESC
+            LIMIT ?
+            """,
+            (user_id, limit),
+        )
+
     # ------------------------------------------------------------------ #
     # Ad Token system
     # ------------------------------------------------------------------ #

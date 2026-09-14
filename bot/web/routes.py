@@ -441,8 +441,14 @@ async def _bot_identity(request: web.Request) -> Tuple[str, str]:
 
 async def miniapp_config(request: web.Request) -> web.Response:
     name, username = await _bot_identity(request)
+    wait_seconds = max(5, int(await db.get_setting("ad_wait_seconds", "10") or 10))
     return web.json_response(
-        {"ok": True, "brand_name": name, "bot_username": username},
+        {
+            "ok": True,
+            "brand_name": name,
+            "bot_username": username,
+            "ad_wait_seconds": wait_seconds,
+        },
         headers={"Cache-Control": "no-store"},
     )
 
@@ -645,7 +651,10 @@ async def miniapp_profile(request: web.Request) -> web.Response:
         return web.json_response({"ok": False, "error": "Telegram session যাচাই করা যায়নি।"}, status=401)
     user_id, user_data = actor
     stats = await db.get_user_stats(user_id)
-    favorite_rows = await db.get_favorites(user_id, limit=40)
+    favorite_rows, recent_rows = await asyncio.gather(
+        db.get_favorites(user_id, limit=40),
+        db.get_user_recent_downloads(user_id, limit=8),
+    )
     user = stats["user"]
     return web.json_response(
         {
@@ -669,6 +678,7 @@ async def miniapp_profile(request: web.Request) -> web.Response:
                 "subscribed": stats["subscribed"],
             },
             "favorites": [_miniapp_movie_payload(row) for row in favorite_rows],
+            "recent_downloads": [_miniapp_movie_payload(row) for row in recent_rows],
         },
         headers={"Cache-Control": "no-store"},
     )
@@ -872,7 +882,8 @@ async def miniapp_claim(request: web.Request) -> web.Response:
     if not settings.public_url:
         return web.json_response({"ok": False, "error": "Mini App URL কনফিগার করা নেই।"}, status=503)
 
-    token = await db.create_ad_token(movie_id, user_id, wait_seconds=10)
+    wait_seconds = max(5, int(await db.get_setting("ad_wait_seconds", "10") or 10))
+    token = await db.create_ad_token(movie_id, user_id, wait_seconds=wait_seconds)
     raw_url = f"{settings.public_url.rstrip('/')}/ad/{token}"
     ad_url = await shorten_url(raw_url)
     return web.json_response(
@@ -880,7 +891,7 @@ async def miniapp_claim(request: web.Request) -> web.Response:
             "ok": True,
             "title": movie["title"],
             "ad_url": ad_url,
-            "wait_seconds": 10,
+            "wait_seconds": wait_seconds,
         },
         headers={"Cache-Control": "no-store"},
     )

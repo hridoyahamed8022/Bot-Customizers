@@ -63,7 +63,11 @@
         </section>
 
         <section id="upcoming-section" class="content-section hidden">
-          <div class="section-title"><h2>▣ Upcoming</h2><span id="upcoming-count" class="count-pill"></span></div>
+          <div class="upcoming-hero">
+            <div class="upcoming-hero-icon">✦</div>
+            <div><h2>আসছে খুব শিগগিরই</h2><p>নতুন release আগে থেকেই save করে রাখুন।</p></div>
+            <span id="upcoming-count" class="count-pill"></span>
+          </div>
           <div id="upcoming-grid" class="movie-grid"></div>
           <div id="upcoming-empty" class="empty-state hidden">
             <div class="empty-icon">🗓</div>
@@ -105,9 +109,20 @@
       <section id="profile-screen" class="standalone-screen hidden">
         <div class="page-heading">
           <div id="profile-avatar" class="profile-avatar">G</div>
-          <div><h1 id="profile-name">Profile</h1><p id="profile-handle">Moviex Hub Team user</p></div>
+          <div class="profile-heading-copy">
+            <h1 id="profile-name">Profile</h1>
+            <p id="profile-handle">Moviex Hub Team user</p>
+            <span id="profile-badge" class="profile-badge">Movie lover</span>
+          </div>
         </div>
+        <p id="profile-summary" class="profile-summary">Movie save করুন, rate দিন আর নতুন release-এর খবর রাখুন।</p>
         <div id="profile-stats" class="profile-stats"></div>
+        <div class="section-title profile-section-title"><h2>↻ Recent Downloads</h2><span id="profile-download-count" class="count-pill">0</span></div>
+        <div id="profile-downloads" class="profile-downloads"></div>
+        <div id="profile-download-empty" class="empty-state compact-empty">
+          <div class="empty-icon">↻</div>
+          <p>আপনার download history এখানে দেখা যাবে।</p>
+        </div>
         <div class="section-title profile-section-title"><h2>❤️ My List</h2><span id="profile-favorite-count" class="count-pill">0</span></div>
         <div id="profile-favorites" class="movie-grid"></div>
         <div id="profile-empty" class="empty-state hidden">
@@ -126,6 +141,7 @@
           <span id="detail-category" class="category-label"></span>
           <h1 id="detail-title"></h1>
           <p id="detail-meta" class="detail-meta"></p>
+          <div id="detail-gate-copy" class="detail-gate-copy">🔒 Ad দেখে অপেক্ষা করলেই movie আপনার inbox-এ যাবে।</div>
           <div class="detail-actions">
             <button id="favorite-button" class="secondary-button" type="button">♡ <span>Like</span></button>
             <button id="download-button" class="primary-button" type="button">⇩ Download</button>
@@ -156,7 +172,7 @@
         <div class="sheet-icon">▣</div>
         <h2>Select Video Quality</h2>
         <p>Choose your preferred quality to unlock/download</p>
-        <div class="how-to"><strong>ⓘ How to download:</strong><br />Click any quality, wait 10s on the unlock page, then return to the app. The file will appear in your inbox automatically!</div>
+         <div id="how-to-copy" class="how-to"><strong>ⓘ How to download:</strong><br />Click the button, wait on the unlock page, then the file will appear in your Telegram inbox.</div>
         <button id="quality-button" class="quality-button" type="button"><span>⇩ Download 720p</span><b>▣</b></button>
       </article>
     </div>
@@ -167,7 +183,7 @@
         <button class="close-button" type="button" data-close-modal="unlock-modal">⌃</button>
         <div class="unlock-icon">♧</div>
         <h2>Unlock Video</h2>
-        <p>To unlock this file, wait 10 seconds on the link below.</p>
+        <p id="unlock-copy">To unlock this file, wait on the link below.</p>
         <button id="open-ad-button" class="ad-button" type="button">🔗 Click Here (Open Link)</button>
       </article>
     </div>
