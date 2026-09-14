@@ -910,6 +910,9 @@ async def miniapp_complete_ad(request: web.Request) -> web.Response:
     if time.time() > row["expires_at"]:
         return web.json_response({"ok": False, "error": "লিংকের মেয়াদ শেষ হয়ে গেছে।"}, status=410)
 
+    if not await db.mark_ad_completed(token):
+        return web.json_response({"ok": True, "processing": True})
+
     from ..handlers.callbacks import deliver_movie
 
     class _DirectTarget:

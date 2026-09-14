@@ -211,6 +211,7 @@ CREATE TABLE IF NOT EXISTS ad_tokens (
     created_at  REAL NOT NULL,
     expires_at  REAL NOT NULL,
     wait_seconds INTEGER NOT NULL DEFAULT 30,
+    ad_completed INTEGER NOT NULL DEFAULT 0,
     used        INTEGER NOT NULL DEFAULT 0
 );
 CREATE INDEX IF NOT EXISTS ad_tokens_expires ON ad_tokens(expires_at);
@@ -265,6 +266,7 @@ class Database:
         await self._add_column_if_missing("movies", "poster_url", "TEXT")
         await self._add_column_if_missing("movies", "poster_file_id", "TEXT")
         await self._add_column_if_missing("ad_tokens", "wait_seconds", "INTEGER NOT NULL DEFAULT 30")
+        await self._add_column_if_missing("ad_tokens", "ad_completed", "INTEGER NOT NULL DEFAULT 0")
         await self._conn.commit()
         log.info("SQLite ready at %s", self.path)
 
@@ -1203,7 +1205,7 @@ class Database:
         expires = now + 7200
         assert self._conn is not None
         await self._conn.execute(
-            "INSERT INTO ad_tokens(token,movie_id,user_id,created_at,expires_at,wait_seconds) VALUES(?,?,?,?,?,?)",
+            "INSERT INTO ad_tokens(token,movie_id,user_id,created_at,expires_at,wait_seconds,ad_completed) VALUES(?,?,?,?,?,?,0)",
             (token, movie_id, user_id, now, expires, max(5, min(300, int(wait_seconds)))),
         )
         await self._conn.commit()
@@ -1221,15 +1223,25 @@ class Database:
         await self._conn.commit()
 
     async def claim_ad_token(self, token: str) -> bool:
-        """Atomically reserve a token while one delivery is in progress."""
+        """Atomically reserve a token after the ad page has completed."""
         assert self._conn is not None
         async with self._lock:
             cur = await self._conn.execute(
-                "UPDATE ad_tokens SET used=-1 WHERE token=? AND used=0",
+                "UPDATE ad_tokens SET used=-1 WHERE token=? AND used=0 AND ad_completed=1",
                 (token,),
             )
             await self._conn.commit()
             return cur.rowcount == 1
+
+    async def mark_ad_completed(self, token: str) -> bool:
+        """Allow delivery only after the server-side ad page completion call."""
+        assert self._conn is not None
+        cur = await self._conn.execute(
+            "UPDATE ad_tokens SET ad_completed=1 WHERE token=? AND used=0",
+            (token,),
+        )
+        await self._conn.commit()
+        return cur.rowcount == 1
 
     async def release_ad_token(self, token: str) -> None:
         """Make a failed delivery claimable again."""
