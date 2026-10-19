@@ -135,8 +135,20 @@ async def cmd_start(
         except ValueError:
             mid = 0
         if mid:
-            from .callbacks import deliver_movie
-            await deliver_movie(message, mid)
+            movie = await db.get_movie(mid)
+            if not movie:
+                await message.answer("এই movie-টি আর পাওয়া যাচ্ছে না।")
+                return
+            movie_url = await movie_web_url(message.from_user.id, mid)
+            if not movie_url:
+                await message.answer("Movie web page এখন খোলা যাচ্ছে না। পরে চেষ্টা করুন।")
+                return
+            kb = InlineKeyboardBuilder()
+            kb.button(text=f"🎬 {movie['title'][:48]} — Web Page খুলুন", url=movie_url)
+            await message.answer(
+                "Movie detail page খুলুন। Download-এর আগে web page-এ ad-এর সময় সম্পূর্ণ করতে হবে।",
+                reply_markup=kb.as_markup(),
+            )
             return
 
     # ওয়েলকাম ছবি সেট থাকলে নতুন + পুরনো উভয় ইউজারই ছবিসহ মেসেজ পাবে

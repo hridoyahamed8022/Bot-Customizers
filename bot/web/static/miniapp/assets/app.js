@@ -191,9 +191,10 @@
       const data = await api("/api/miniapp/config", { cache: "no-store" });
       applyBrand(data.brand_name);
       state.adWait = Number(data.ad_wait_seconds || 10);
-      $("unlock-copy").textContent = "To unlock this file, wait " + state.adWait + " seconds on the link below.";
-      $("how-to-copy").innerHTML = "<strong>ⓘ How to download:</strong><br>Click the button, wait " +
-        state.adWait + "s on the unlock page, then the file will appear in your Telegram inbox.";
+      $("unlock-copy").textContent = "Ad page-এ " + state.adWait +
+        " সেকেন্ড অপেক্ষা করুন, তারপর Download চাপুন।";
+      $("how-to-copy").innerHTML = "<strong>ⓘ How to download:</strong><br>Ad page-এ " +
+        state.adWait + " সেকেন্ড অপেক্ষা করুন, তারপর Download চাপুন।";
     } catch (error) {
       // Static Moviex Hub Team fallback keeps the app usable if Telegram is offline.
     }
@@ -403,7 +404,11 @@
     $("quality-button").querySelector("span").textContent = "লিংক তৈরি হচ্ছে...";
     try {
       if (state.adToken) {
-        state.adUrl = new URL("/ad/" + encodeURIComponent(state.adToken), window.location.href).href;
+        const data = await api("/api/miniapp/ad-link", {
+          method: "POST", headers: headers(),
+          body: JSON.stringify({ movie_id: state.selected.id, token: state.adToken })
+        });
+        state.adUrl = data.ad_url;
       } else {
         const data = await api("/api/miniapp/claim", {
           method: "POST", headers: headers(), body: JSON.stringify({ movie_id: state.selected.id })
@@ -418,7 +423,7 @@
   $("open-ad-button").addEventListener("click", () => {
     if (!state.adUrl) return showToast("লিংক তৈরি হয়নি।");
     hideModal("unlock-modal");
-    showToast("Sending File... " + state.adWait + " সেকেন্ড পরে bot inbox দেখুন।");
+    showToast("Ad page-এ যান। সময় শেষ হলে Download button চাপুন।");
     if (tg && tg.openLink) tg.openLink(state.adUrl);
     else window.location.href = state.adUrl;
   });

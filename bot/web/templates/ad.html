@@ -228,8 +228,8 @@ body::after{
   </div>
 
    <div class="info-box" id="delivery-info">
-     ⏳ সময় শেষ হলে <strong>মুভি সরাসরি আপনার bot inbox-এ যাবে</strong>।<br>
-     পেজটি খোলা রাখুন।
+     ⏳ বিজ্ঞাপনের সময় শেষ হলে <strong>Download বাটনে চাপুন</strong>।<br>
+     শুধু অপেক্ষা করলে file পাঠানো হবে না।
   </div>
 
   <a id="btn-get" class="btn btn-disabled" href="#">
@@ -320,7 +320,7 @@ body::after{
       ring.style.strokeDashoffset = circum;
       pbar.style.width = '0%';
       btn.className = 'btn btn-primary';
-      completeDelivery();
+       btn.textContent = '✅ বিজ্ঞাপনের সময় শেষ — Download করুন';
       return;
     }
     secsEl.textContent = remaining;

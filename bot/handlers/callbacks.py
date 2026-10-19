@@ -145,6 +145,7 @@ async def _ad_countdown_deliver(
     title: str,
     total: int,
 ) -> None:
+    return
     """বাটন ক্লিকের পর বটে কাউন্টডাউন দেখায় এবং শেষে মুভি ডেলিভার করে।"""
     kb = InlineKeyboardBuilder()
     kb.button(text="📺 বিজ্ঞাপন দেখুন", url=ad_url)
@@ -190,6 +191,30 @@ async def _ad_countdown_deliver(
 
 
 async def send_ad_link(callback: CallbackQuery, movie_id: int) -> None:
+    if not cfg.public_url:
+        await callback.answer("Movie web page এখন খোলা যাচ্ছে না। পরে চেষ্টা করুন।", show_alert=True)
+        return
+    movie = await db.get_movie(movie_id)
+    if not movie:
+        await callback.answer("⚠️ এই ফাইলটি লাইব্রেরিতে আর নেই।", show_alert=True)
+        return
+    wait_secs = max(5, int(await db.get_setting("ad_wait_seconds", "10") or 10))
+    token = await db.create_ad_token(movie_id, callback.from_user.id, wait_secs)
+    movie_url = f"{cfg.public_url.rstrip('/')}/miniapp/?movie={movie_id}&token={token}"
+    kb = InlineKeyboardBuilder()
+    kb.button(text="🎬 Movie Web Page খুলুন", url=movie_url)
+    kb.adjust(1)
+    text = (
+        f"🎬 <b>{esc(movie['title'])}</b>\n\n"
+        "Movie web page খুলে Download চাপুন।\n"
+        f"{wait_secs} সেকেন্ডের ad সম্পূর্ণ না হলে file পাঠানো হবে না।"
+    )
+    try:
+        await callback.message.edit_text(text, reply_markup=kb.as_markup())
+    except TelegramBadRequest:
+        await callback.message.answer(text, reply_markup=kb.as_markup())
+    await callback.answer()
+    return
     """Ad system চালু থাকলে বটেই কাউন্টডাউন শুরু করে, শেষে মুভি দেয়।"""
     movie = await db.get_movie(movie_id)
     if not movie:
@@ -216,18 +241,6 @@ async def send_ad_link(callback: CallbackQuery, movie_id: int) -> None:
         sent = await callback.message.answer(init_text, reply_markup=kb.as_markup())
     await callback.answer()
 
-    asyncio.create_task(
-        _ad_countdown_deliver(
-            callback.bot,
-            callback.from_user.id,
-            sent.message_id,
-            token,
-            movie_id,
-            ad_url,
-            movie["title"],
-            wait_secs,
-        )
-    )
 
 
 @router.callback_query(F.data.startswith("m:view:"))
@@ -296,6 +309,9 @@ async def deliver_movie_by_token(message: Message, token: str) -> None:
     if row["user_id"] != message.from_user.id:
         await message.answer("⛔ এই লিংকটি আপনার জন্য নয়।")
         return
+    if not row.get("ad_completed"):
+        await message.answer("🔒 আগে Movie web page-এ ad-এর সময় সম্পূর্ণ করুন।")
+        return
     if not await db.claim_ad_token(token):
         await message.answer("⏳ ফাইলটি পাঠানো হচ্ছে বা পাঠানো হয়েছে।")
         return
@@ -313,11 +329,7 @@ async def cb_get_movie(callback: CallbackQuery) -> None:
         await callback.answer("ভুল আইডি।", show_alert=True)
         return
 
-    ad_enabled = await db.get_setting("ad_enabled", "0")
-    if ad_enabled == "1" and cfg.public_url:
-        await send_ad_link(callback, movie_id)
-    else:
-        await deliver_movie(callback, movie_id)
+    await send_ad_link(callback, movie_id)
 
 
 @router.callback_query(F.data == "maint:refresh")

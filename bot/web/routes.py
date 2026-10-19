@@ -897,8 +897,33 @@ async def miniapp_claim(request: web.Request) -> web.Response:
     )
 
 
+async def miniapp_ad_link(request: web.Request) -> web.Response:
+    """Return the existing ad-shortener URL for a token issued by a bot result."""
+    if not settings.public_url:
+        return web.json_response({"ok": False, "error": "Movie web page URL কনফিগার করা নেই।"}, status=503)
+    try:
+        body = await request.json()
+        token = str(body.get("token", "")).strip()
+        movie_id = int(body.get("movie_id", 0))
+    except (TypeError, ValueError, json.JSONDecodeError):
+        return web.json_response({"ok": False, "error": "সঠিক movie link দিন।"}, status=400)
+
+    row = await db.get_ad_token(token)
+    if not row or row["movie_id"] != movie_id:
+        return web.json_response({"ok": False, "error": "এই movie linkটি মেলেনি। আবার search করুন।"}, status=404)
+    if row["used"] != 0 or time.time() > row["expires_at"]:
+        return web.json_response({"ok": False, "error": "এই movie linkটির মেয়াদ শেষ। আবার search করুন।"}, status=410)
+
+    raw_url = f"{settings.public_url.rstrip('/')}/ad/{token}"
+    ad_url = await shorten_url(raw_url)
+    return web.json_response(
+        {"ok": True, "ad_url": ad_url, "wait_seconds": row["wait_seconds"]},
+        headers={"Cache-Control": "no-store"},
+    )
+
+
 async def miniapp_complete_ad(request: web.Request) -> web.Response:
-    """Deliver the file from the ad page itself; deep-links remain only a fallback."""
+    """Deliver only after the ad page has stayed open for its server-side wait."""
     token = (request.match_info.get("token") or "").strip()
     row = await db.get_ad_token(token)
     if not row:
@@ -910,8 +935,23 @@ async def miniapp_complete_ad(request: web.Request) -> web.Response:
     if time.time() > row["expires_at"]:
         return web.json_response({"ok": False, "error": "লিংকের মেয়াদ শেষ হয়ে গেছে।"}, status=410)
 
+    started_at = row.get("ad_started_at")
+    if not started_at:
+        return web.json_response(
+            {"ok": False, "error": "আগে ad page খুলুন।"}, status=403
+        )
+    remaining = max(0, int(row["wait_seconds"] - (time.time() - started_at) + 0.999))
+    if remaining:
+        return web.json_response(
+            {"ok": False, "error": "ad page-এর সময় এখনো শেষ হয়নি।", "remaining_seconds": remaining},
+            status=425,
+        )
+
     if not await db.mark_ad_completed(token):
-        return web.json_response({"ok": True, "processing": True})
+        return web.json_response(
+            {"ok": False, "error": "ad সম্পূর্ণ না হলে file পাঠানো যাবে না।"},
+            status=403,
+        )
 
     from ..handlers.callbacks import deliver_movie
 
@@ -2020,6 +2060,8 @@ async def ad_page(request: web.Request) -> web.Response:
              "complete_url": f"/ad/{token}/complete", "token": token},
         )
 
+    await db.mark_ad_started(token)
+    row = await db.get_ad_token(token) or row
     movie = await db.get_movie(row["movie_id"])
     title = movie["title"] if movie else "মুভি"
     tg_link = f"https://t.me/{bot_username}?start=get_{token}"
@@ -2099,8 +2141,8 @@ def setup_routes(app: web.Application) -> None:
     app.router.add_post("/api/miniapp/rating", miniapp_rate_movie)
     app.router.add_post("/api/miniapp/favorite", miniapp_toggle_favorite)
     app.router.add_post("/api/miniapp/claim", miniapp_claim)
+    app.router.add_post("/api/miniapp/ad-link", miniapp_ad_link)
     app.router.add_post("/ad/{token}/complete", miniapp_complete_ad)
-    app.router.add_get("/ad/{token}/complete", miniapp_complete_ad)
     app.router.add_get("/login", login_get)
     app.router.add_post("/login", login_post)
     app.router.add_post("/logout", logout)
